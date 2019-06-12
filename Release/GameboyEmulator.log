@@ -1,0 +1,20 @@
+﻿  main.cpp
+  cpu.cpp
+C:\Users\LilaQ\source\repos\GameboyEmulator\GameboyEmulator\main.cpp(218,15): warning C4244:  'initializing': conversion from 'double' to 'int', possible loss of data
+  ppu.cpp
+C:\Users\LilaQ\source\repos\GameboyEmulator\GameboyEmulator\cpu.cpp(2023,54): warning C4244:  '=': conversion from 'uint16_t' to 'unsigned char', possible loss of data
+C:\Users\LilaQ\source\repos\GameboyEmulator\GameboyEmulator\ppu.cpp(52,13): warning C4101:  'adr': unreferenced local variable
+ppu.obj : error LNK2001: unresolved external symbol _SDL_RenderCopy
+ppu.obj : error LNK2001: unresolved external symbol _SDL_RenderClear
+ppu.obj : error LNK2001: unresolved external symbol _SDL_UpdateTexture
+ppu.obj : error LNK2001: unresolved external symbol _SDL_DestroyRenderer
+ppu.obj : error LNK2001: unresolved external symbol _SDL_Init
+ppu.obj : error LNK2001: unresolved external symbol _SDL_DestroyWindow
+ppu.obj : error LNK2001: unresolved external symbol _SDL_Quit
+ppu.obj : error LNK2001: unresolved external symbol _SDL_CreateWindowAndRenderer
+ppu.obj : error LNK2001: unresolved external symbol _SDL_CreateTexture
+ppu.obj : error LNK2001: unresolved external symbol _SDL_PollEvent
+ppu.obj : error LNK2001: unresolved external symbol _SDL_RenderDrawPoint
+ppu.obj : error LNK2001: unresolved external symbol _SDL_RenderPresent
+ppu.obj : error LNK2001: unresolved external symbol _SDL_SetRenderDrawColor
+C:\Users\LilaQ\source\repos\GameboyEmulator\Release\GameboyEmulator.exe : fatal error LNK1120: 13 unresolved externals
