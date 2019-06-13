@@ -8,7 +8,7 @@ unsigned char opcode;
 
 //	BIT - L2 - T8 - Z01/
 //	Test Bit
-void op_bit(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_bit(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc, int m = 2) {
 #ifdef DEBUG
 	printf("BIT");
 #endif // DEBUG
@@ -16,11 +16,14 @@ void op_bit(unsigned char& parameter, int bitnr, Flags& flags, Registers& regist
 	flags.N = 0;
 	flags.H = 1;
 	pc += 2;
+
+	//	return m-cycles
+	return m;
 }
 
 //	CP
 //	Compare
-void op_cp(unsigned char& parameter, unsigned char& val, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_cp(unsigned char& parameter, unsigned char& val, Flags& flags, Registers& registers, uint16_t& pc) {
 #ifdef DEBUG
 	printf("CP");
 #endif // DEBUG
@@ -29,26 +32,35 @@ void op_cp(unsigned char& parameter, unsigned char& val, Flags& flags, Registers
 	flags.H = (parameter & 0xF) < (val & 0xF);
 	flags.C = (parameter < val) ? 1 : 0;
 	pc += 1;
+
+	//	return m-cycle
+	return 1;
 }
 
 // LD X, Y
 // Load Y into X
-void op_ld(unsigned char& parameter, unsigned char& val, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_ld(unsigned char& parameter, unsigned char& val, Flags& flags, Registers& registers, uint16_t& pc) {
 #ifdef DEBUG
 	printf("LD");
 #endif // DEBUG
 	parameter = val;
 	pc += 1;
+
+	//	return m-cycle
+	return 1;
 }
 
 //	RES - L2 - T8 - ////
 //	Reset Bit
-void op_res(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_res(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc, int m = 2) {
 #ifdef DEBUG
 	printf("RES");
 #endif // DEBUG
 	parameter = parameter & ~(0x1 << bitnr);
 	pc += 2;
+
+	//	return m-cycles
+	return m;
 }
 
 //	RLC - L2 - T8 - Z00C
@@ -154,12 +166,15 @@ void op_sbc_u8(unsigned char arg, Flags& flags, Registers& registers, uint16_t& 
 
 //	SET - L2 - T8 - ////
 //	Set Bit
-void op_set(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_set(unsigned char& parameter, int bitnr, Flags& flags, Registers& registers, uint16_t& pc, int m = 2) {
 #ifdef DEBUG
 	printf("SET");
 #endif // DEBUG
 	parameter = parameter | (0x1 << bitnr);
 	pc += 2;
+
+	//	return m-cycles
+	return m;
 }
 
 //	SLA - L2 - T8 - Z00C
@@ -221,7 +236,7 @@ void op_swap(unsigned char& parameter, Flags& flags, Registers& registers, uint1
 
 //	XOR
 //	XOR
-void op_xor(unsigned char& parameter, Flags& flags, Registers& registers, uint16_t& pc) {
+int op_xor(unsigned char& parameter, Flags& flags, Registers& registers, uint16_t& pc, int m = 1) {
 #ifdef DEBUG
 	printf("XOR A");
 #endif // DEBUG
@@ -231,9 +246,12 @@ void op_xor(unsigned char& parameter, Flags& flags, Registers& registers, uint16
 	flags.H = 0;
 	flags.C = 0;
 	pc += 1;
+
+	//	return m-cycles
+	return m;
 }
 
-void processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers& registers, Flags& flags, int& interrupts_enabled) {
+int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers& registers, Flags& flags, int& interrupts_enabled) {
 	opcode = memory[pc];
 
 	switch (opcode) {
@@ -1733,27 +1751,13 @@ void processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers
 		break;
 
 	//	mnemonic:		LD A
-	case 0x7f:
-		op_ld(registers.A, registers.A, flags, registers, pc);
-		break;
-	case 0x78:
-		op_ld(registers.A, registers.B, flags, registers, pc);
-		break;
-	case 0x79:
-		op_ld(registers.A, registers.C, flags, registers, pc);
-		break;
-	case 0x7a:
-		op_ld(registers.A, registers.D, flags, registers, pc);
-		break;
-	case 0x7b:
-		op_ld(registers.A, registers.E, flags, registers, pc);
-		break;
-	case 0x7c:
-		op_ld(registers.A, registers.H, flags, registers, pc);
-		break;
-	case 0x7d:
-		op_ld(registers.A, registers.L, flags, registers, pc);
-		break;
+	case 0x7f: op_ld(registers.A, registers.A, flags, registers, pc); break;
+	case 0x78: op_ld(registers.A, registers.B, flags, registers, pc); break;
+	case 0x79: op_ld(registers.A, registers.C, flags, registers, pc); break;
+	case 0x7a: op_ld(registers.A, registers.D, flags, registers, pc); break;
+	case 0x7b: op_ld(registers.A, registers.E, flags, registers, pc); break;
+	case 0x7c: op_ld(registers.A, registers.H, flags, registers, pc); break;
+	case 0x7d: op_ld(registers.A, registers.L, flags, registers, pc); break;
 
 	//	mnemonic:		LD A, n
 	//	length:			2
@@ -2018,27 +2022,13 @@ void processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers
 		break;
 
 	//	mnemonic:		CP
-	case 0xbf:
-		op_cp(registers.A, registers.A, flags, registers, pc);
-		break;
-	case 0xb8:
-		op_cp(registers.A, registers.B, flags, registers, pc);
-		break;
-	case 0xb9:
-		op_cp(registers.A, registers.C, flags, registers, pc);
-		break;
-	case 0xba:
-		op_cp(registers.A, registers.D, flags, registers, pc);
-		break;
-	case 0xbb:
-		op_cp(registers.A, registers.E, flags, registers, pc);
-		break;
-	case 0xbc:
-		op_cp(registers.A, registers.H, flags, registers, pc);
-		break;
-	case 0xbd:
-		op_cp(registers.A, registers.L, flags, registers, pc);
-		break;
+	case 0xbf: return op_cp(registers.A, registers.A, flags, registers, pc); break;
+	case 0xb8: return op_cp(registers.A, registers.B, flags, registers, pc); break;
+	case 0xb9: return op_cp(registers.A, registers.C, flags, registers, pc); break;
+	case 0xba: return op_cp(registers.A, registers.D, flags, registers, pc); break;
+	case 0xbb: return op_cp(registers.A, registers.E, flags, registers, pc); break;
+	case 0xbc: return op_cp(registers.A, registers.H, flags, registers, pc); break;
+	case 0xbd: return op_cp(registers.A, registers.L, flags, registers, pc); break;
 
 	//	mnemonic:		CP (HL)
 	//	length:			1
@@ -2082,48 +2072,14 @@ void processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers
 		break;
 
 	//	mnemonic:		XOR
-	case 0xaf:
-		op_xor(registers.A, flags, registers, pc);
-		break;
-	case 0xa8:
-		op_xor(registers.B, flags, registers, pc);
-		break;
-	case 0xa9:
-		op_xor(registers.C, flags, registers, pc);
-		break;
-	case 0xaa:
-		op_xor(registers.D, flags, registers, pc);
-		break;
-	case 0xab:
-		op_xor(registers.E, flags, registers, pc);
-		break;
-	case 0xac:
-		op_xor(registers.H, flags, registers, pc);
-		break;
-	case 0xad:
-		op_xor(registers.L, flags, registers, pc);
-		break;
-
-	//	mnemonic:		XOR A, (HL)
-	//	length:			1
-	//	cycles:			8
-	//	flags: 
-	//					Z - if zero
-	//					N - Reset
-	//					H - Reset
-	//					C - Reset
-	//	description:	XORs register A with what is stored in HL's adress, result in A
-	case 0xae:
-		#ifdef DEBUG
-		printf("XOR A, (HL)");
-		#endif // DEBUG
-		registers.A = registers.A ^ memory[(registers.H << 8) | registers.L];
-		flags.Z = (registers.A == 0) ? 1 : 0;
-		flags.N = 0;
-		flags.H = 0;
-		flags.C = 0;
-		pc += 1;
-		break;
+	case 0xaf: return op_xor(registers.A, flags, registers, pc); break;
+	case 0xa8: return op_xor(registers.B, flags, registers, pc); break;
+	case 0xa9: return op_xor(registers.C, flags, registers, pc); break;
+	case 0xaa: return op_xor(registers.D, flags, registers, pc); break;
+	case 0xab: return op_xor(registers.E, flags, registers, pc); break;
+	case 0xac: return op_xor(registers.H, flags, registers, pc); break;
+	case 0xad: return op_xor(registers.L, flags, registers, pc); break;
+	case 0xae: return op_xor(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2);
 
 	//	mnemonic:		OR (HL)
 	//	length:			1
@@ -3507,206 +3463,206 @@ void processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers
 
 		//	BIT - L2 - T8 - Z01/
 		//	Test Bit
-		case 0x40: op_bit(registers.B, 0, flags, registers, pc); break;
-		case 0x41: op_bit(registers.C, 0, flags, registers, pc); break;
-		case 0x42: op_bit(registers.D, 0, flags, registers, pc); break;
-		case 0x43: op_bit(registers.E, 0, flags, registers, pc); break;
-		case 0x44: op_bit(registers.H, 0, flags, registers, pc); break;
-		case 0x45: op_bit(registers.L, 0, flags, registers, pc); break;
-		case 0x46: op_bit(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc); break;
-		case 0x47: op_bit(registers.A, 0, flags, registers, pc); break;
-		case 0x48: op_bit(registers.B, 1, flags, registers, pc); break;
-		case 0x49: op_bit(registers.C, 1, flags, registers, pc); break;
-		case 0x4a: op_bit(registers.D, 1, flags, registers, pc); break;
-		case 0x4b: op_bit(registers.E, 1, flags, registers, pc); break;
-		case 0x4c: op_bit(registers.H, 1, flags, registers, pc); break;
-		case 0x4d: op_bit(registers.L, 1, flags, registers, pc); break;
-		case 0x4e: op_bit(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc); break;
-		case 0x4f: op_bit(registers.A, 1, flags, registers, pc); break;
-		case 0x50: op_bit(registers.B, 2, flags, registers, pc); break;
-		case 0x51: op_bit(registers.C, 2, flags, registers, pc); break;
-		case 0x52: op_bit(registers.D, 2, flags, registers, pc); break;
-		case 0x53: op_bit(registers.E, 2, flags, registers, pc); break;
-		case 0x54: op_bit(registers.H, 2, flags, registers, pc); break;
-		case 0x55: op_bit(registers.L, 2, flags, registers, pc); break;
-		case 0x56: op_bit(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc); break;
-		case 0x57: op_bit(registers.A, 2, flags, registers, pc); break;
-		case 0x58: op_bit(registers.B, 3, flags, registers, pc); break;
-		case 0x59: op_bit(registers.C, 3, flags, registers, pc); break;
-		case 0x5a: op_bit(registers.D, 3, flags, registers, pc); break;
-		case 0x5b: op_bit(registers.E, 3, flags, registers, pc); break;
-		case 0x5c: op_bit(registers.H, 3, flags, registers, pc); break;
-		case 0x5d: op_bit(registers.L, 3, flags, registers, pc); break;
-		case 0x5e: op_bit(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc); break;
-		case 0x5f: op_bit(registers.A, 3, flags, registers, pc); break;
-		case 0x60: op_bit(registers.B, 4, flags, registers, pc); break;
-		case 0x61: op_bit(registers.C, 4, flags, registers, pc); break;
-		case 0x62: op_bit(registers.D, 4, flags, registers, pc); break;
-		case 0x63: op_bit(registers.E, 4, flags, registers, pc); break;
-		case 0x64: op_bit(registers.H, 4, flags, registers, pc); break;
-		case 0x65: op_bit(registers.L, 4, flags, registers, pc); break;
-		case 0x66: op_bit(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc); break;
-		case 0x67: op_bit(registers.A, 4, flags, registers, pc); break;
-		case 0x68: op_bit(registers.B, 5, flags, registers, pc); break;
-		case 0x69: op_bit(registers.C, 5, flags, registers, pc); break;
-		case 0x6a: op_bit(registers.D, 5, flags, registers, pc); break;
-		case 0x6b: op_bit(registers.E, 5, flags, registers, pc); break;
-		case 0x6c: op_bit(registers.H, 5, flags, registers, pc); break;
-		case 0x6d: op_bit(registers.L, 5, flags, registers, pc); break;
-		case 0x6e: op_bit(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc); break;
-		case 0x6f: op_bit(registers.A, 5, flags, registers, pc); break;
-		case 0x70: op_bit(registers.B, 6, flags, registers, pc); break;
-		case 0x71: op_bit(registers.C, 6, flags, registers, pc); break;
-		case 0x72: op_bit(registers.D, 6, flags, registers, pc); break;
-		case 0x73: op_bit(registers.E, 6, flags, registers, pc); break;
-		case 0x74: op_bit(registers.H, 6, flags, registers, pc); break;
-		case 0x75: op_bit(registers.L, 6, flags, registers, pc); break;
-		case 0x76: op_bit(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc); break;
-		case 0x77: op_bit(registers.A, 6, flags, registers, pc); break;
-		case 0x78: op_bit(registers.B, 7, flags, registers, pc); break;
-		case 0x79: op_bit(registers.C, 7, flags, registers, pc); break;
-		case 0x7a: op_bit(registers.D, 7, flags, registers, pc); break;
-		case 0x7b: op_bit(registers.E, 7, flags, registers, pc); break;
-		case 0x7c: op_bit(registers.H, 7, flags, registers, pc); break;
-		case 0x7d: op_bit(registers.L, 7, flags, registers, pc); break;
-		case 0x7e: op_bit(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc); break;
-		case 0x7f: op_bit(registers.A, 7, flags, registers, pc); break;
+		case 0x40: return op_bit(registers.B, 0, flags, registers, pc); break;
+		case 0x41: return op_bit(registers.C, 0, flags, registers, pc); break;
+		case 0x42: return op_bit(registers.D, 0, flags, registers, pc); break;
+		case 0x43: return op_bit(registers.E, 0, flags, registers, pc); break;
+		case 0x44: return op_bit(registers.H, 0, flags, registers, pc); break;
+		case 0x45: return op_bit(registers.L, 0, flags, registers, pc); break;
+		case 0x46: return op_bit(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 3); break;
+		case 0x47: return op_bit(registers.A, 0, flags, registers, pc); break;
+		case 0x48: return op_bit(registers.B, 1, flags, registers, pc); break;
+		case 0x49: return op_bit(registers.C, 1, flags, registers, pc); break;
+		case 0x4a: return op_bit(registers.D, 1, flags, registers, pc); break;
+		case 0x4b: return op_bit(registers.E, 1, flags, registers, pc); break;
+		case 0x4c: return op_bit(registers.H, 1, flags, registers, pc); break;
+		case 0x4d: return op_bit(registers.L, 1, flags, registers, pc); break;
+		case 0x4e: return op_bit(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 3); break;
+		case 0x4f: return op_bit(registers.A, 1, flags, registers, pc); break;
+		case 0x50: return op_bit(registers.B, 2, flags, registers, pc); break;
+		case 0x51: return op_bit(registers.C, 2, flags, registers, pc); break;
+		case 0x52: return op_bit(registers.D, 2, flags, registers, pc); break;
+		case 0x53: return op_bit(registers.E, 2, flags, registers, pc); break;
+		case 0x54: return op_bit(registers.H, 2, flags, registers, pc); break;
+		case 0x55: return op_bit(registers.L, 2, flags, registers, pc); break;
+		case 0x56: return op_bit(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 3); break;
+		case 0x57: return op_bit(registers.A, 2, flags, registers, pc); break;
+		case 0x58: return op_bit(registers.B, 3, flags, registers, pc); break;
+		case 0x59: return op_bit(registers.C, 3, flags, registers, pc); break;
+		case 0x5a: return op_bit(registers.D, 3, flags, registers, pc); break;
+		case 0x5b: return op_bit(registers.E, 3, flags, registers, pc); break;
+		case 0x5c: return op_bit(registers.H, 3, flags, registers, pc); break;
+		case 0x5d: return op_bit(registers.L, 3, flags, registers, pc); break;
+		case 0x5e: return op_bit(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 3); break;
+		case 0x5f: return op_bit(registers.A, 3, flags, registers, pc); break;
+		case 0x60: return op_bit(registers.B, 4, flags, registers, pc); break;
+		case 0x61: return op_bit(registers.C, 4, flags, registers, pc); break;
+		case 0x62: return op_bit(registers.D, 4, flags, registers, pc); break;
+		case 0x63: return op_bit(registers.E, 4, flags, registers, pc); break;
+		case 0x64: return op_bit(registers.H, 4, flags, registers, pc); break;
+		case 0x65: return op_bit(registers.L, 4, flags, registers, pc); break;
+		case 0x66: return op_bit(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 3); break;
+		case 0x67: return op_bit(registers.A, 4, flags, registers, pc); break;
+		case 0x68: return op_bit(registers.B, 5, flags, registers, pc); break;
+		case 0x69: return op_bit(registers.C, 5, flags, registers, pc); break;
+		case 0x6a: return op_bit(registers.D, 5, flags, registers, pc); break;
+		case 0x6b: return op_bit(registers.E, 5, flags, registers, pc); break;
+		case 0x6c: return op_bit(registers.H, 5, flags, registers, pc); break;
+		case 0x6d: return op_bit(registers.L, 5, flags, registers, pc); break;
+		case 0x6e: return op_bit(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 3); break;
+		case 0x6f: return op_bit(registers.A, 5, flags, registers, pc); break;
+		case 0x70: return op_bit(registers.B, 6, flags, registers, pc); break;
+		case 0x71: return op_bit(registers.C, 6, flags, registers, pc); break;
+		case 0x72: return op_bit(registers.D, 6, flags, registers, pc); break;
+		case 0x73: return op_bit(registers.E, 6, flags, registers, pc); break;
+		case 0x74: return op_bit(registers.H, 6, flags, registers, pc); break;
+		case 0x75: return op_bit(registers.L, 6, flags, registers, pc); break;
+		case 0x76: return op_bit(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 3); break;
+		case 0x77: return op_bit(registers.A, 6, flags, registers, pc); break;
+		case 0x78: return op_bit(registers.B, 7, flags, registers, pc); break;
+		case 0x79: return op_bit(registers.C, 7, flags, registers, pc); break;
+		case 0x7a: return op_bit(registers.D, 7, flags, registers, pc); break;
+		case 0x7b: return op_bit(registers.E, 7, flags, registers, pc); break;
+		case 0x7c: return op_bit(registers.H, 7, flags, registers, pc); break;
+		case 0x7d: return op_bit(registers.L, 7, flags, registers, pc); break;
+		case 0x7e: return op_bit(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 3); break;
+		case 0x7f: return op_bit(registers.A, 7, flags, registers, pc); break;
 
 		//	RES - L2 - T8 - ////
 		//	Reset Bit
-		case 0x80: op_res(registers.B, 0, flags, registers, pc); break;
-		case 0x81: op_res(registers.C, 0, flags, registers, pc); break;
-		case 0x82: op_res(registers.D, 0, flags, registers, pc); break;
-		case 0x83: op_res(registers.E, 0, flags, registers, pc); break;
-		case 0x84: op_res(registers.H, 0, flags, registers, pc); break;
-		case 0x85: op_res(registers.L, 0, flags, registers, pc); break;
-		case 0x86: op_res(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc); break;
-		case 0x87: op_res(registers.A, 0, flags, registers, pc); break;
-		case 0x88: op_res(registers.B, 1, flags, registers, pc); break;
-		case 0x89: op_res(registers.C, 1, flags, registers, pc); break;
-		case 0x8a: op_res(registers.D, 1, flags, registers, pc); break;
-		case 0x8b: op_res(registers.E, 1, flags, registers, pc); break;
-		case 0x8c: op_res(registers.H, 1, flags, registers, pc); break;
-		case 0x8d: op_res(registers.L, 1, flags, registers, pc); break;
-		case 0x8e: op_res(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc); break;
-		case 0x8f: op_res(registers.A, 1, flags, registers, pc); break;
-		case 0x90: op_res(registers.B, 2, flags, registers, pc); break;
-		case 0x91: op_res(registers.C, 2, flags, registers, pc); break;
-		case 0x92: op_res(registers.D, 2, flags, registers, pc); break;
-		case 0x93: op_res(registers.E, 2, flags, registers, pc); break;
-		case 0x94: op_res(registers.H, 2, flags, registers, pc); break;
-		case 0x95: op_res(registers.L, 2, flags, registers, pc); break;
-		case 0x96: op_res(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc); break;
-		case 0x97: op_res(registers.A, 2, flags, registers, pc); break;
-		case 0x98: op_res(registers.B, 3, flags, registers, pc); break;
-		case 0x99: op_res(registers.C, 3, flags, registers, pc); break;
-		case 0x9a: op_res(registers.D, 3, flags, registers, pc); break;
-		case 0x9b: op_res(registers.E, 3, flags, registers, pc); break;
-		case 0x9c: op_res(registers.H, 3, flags, registers, pc); break;
-		case 0x9d: op_res(registers.L, 3, flags, registers, pc); break;
-		case 0x9e: op_res(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc); break;
-		case 0x9f: op_res(registers.A, 3, flags, registers, pc); break;
-		case 0xa0: op_res(registers.B, 4, flags, registers, pc); break;
-		case 0xa1: op_res(registers.C, 4, flags, registers, pc); break;
-		case 0xa2: op_res(registers.D, 4, flags, registers, pc); break;
-		case 0xa3: op_res(registers.E, 4, flags, registers, pc); break;
-		case 0xa4: op_res(registers.H, 4, flags, registers, pc); break;
-		case 0xa5: op_res(registers.L, 4, flags, registers, pc); break;
-		case 0xa6: op_res(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc); break;
-		case 0xa7: op_res(registers.A, 4, flags, registers, pc); break;
-		case 0xa8: op_res(registers.B, 5, flags, registers, pc); break;
-		case 0xa9: op_res(registers.C, 5, flags, registers, pc); break;
-		case 0xaa: op_res(registers.D, 5, flags, registers, pc); break;
-		case 0xab: op_res(registers.E, 5, flags, registers, pc); break;
-		case 0xac: op_res(registers.H, 5, flags, registers, pc); break;
-		case 0xad: op_res(registers.L, 5, flags, registers, pc); break;
-		case 0xae: op_res(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc); break;
-		case 0xaf: op_res(registers.A, 5, flags, registers, pc); break;
-		case 0xb0: op_res(registers.B, 6, flags, registers, pc); break;
-		case 0xb1: op_res(registers.C, 6, flags, registers, pc); break;
-		case 0xb2: op_res(registers.D, 6, flags, registers, pc); break;
-		case 0xb3: op_res(registers.E, 6, flags, registers, pc); break;
-		case 0xb4: op_res(registers.H, 6, flags, registers, pc); break;
-		case 0xb5: op_res(registers.L, 6, flags, registers, pc); break;
-		case 0xb6: op_res(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc); break;
-		case 0xb7: op_res(registers.A, 6, flags, registers, pc); break;
-		case 0xb8: op_res(registers.B, 7, flags, registers, pc); break;
-		case 0xb9: op_res(registers.C, 7, flags, registers, pc); break;
-		case 0xba: op_res(registers.D, 7, flags, registers, pc); break;
-		case 0xbb: op_res(registers.E, 7, flags, registers, pc); break;
-		case 0xbc: op_res(registers.H, 7, flags, registers, pc); break;
-		case 0xbd: op_res(registers.L, 7, flags, registers, pc); break;
-		case 0xbe: op_res(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc); break;
-		case 0xbf: op_res(registers.A, 7, flags, registers, pc); break;
+		case 0x80: return op_res(registers.B, 0, flags, registers, pc); break;
+		case 0x81: return op_res(registers.C, 0, flags, registers, pc); break;
+		case 0x82: return op_res(registers.D, 0, flags, registers, pc); break;
+		case 0x83: return op_res(registers.E, 0, flags, registers, pc); break;
+		case 0x84: return op_res(registers.H, 0, flags, registers, pc); break;
+		case 0x85: return op_res(registers.L, 0, flags, registers, pc); break;
+		case 0x86: return op_res(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 4); break;
+		case 0x87: return op_res(registers.A, 0, flags, registers, pc); break;
+		case 0x88: return op_res(registers.B, 1, flags, registers, pc); break;
+		case 0x89: return op_res(registers.C, 1, flags, registers, pc); break;
+		case 0x8a: return op_res(registers.D, 1, flags, registers, pc); break;
+		case 0x8b: return op_res(registers.E, 1, flags, registers, pc); break;
+		case 0x8c: return op_res(registers.H, 1, flags, registers, pc); break;
+		case 0x8d: return op_res(registers.L, 1, flags, registers, pc); break;
+		case 0x8e: return op_res(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 4); break;
+		case 0x8f: return op_res(registers.A, 1, flags, registers, pc); break;
+		case 0x90: return op_res(registers.B, 2, flags, registers, pc); break;
+		case 0x91: return op_res(registers.C, 2, flags, registers, pc); break;
+		case 0x92: return op_res(registers.D, 2, flags, registers, pc); break;
+		case 0x93: return op_res(registers.E, 2, flags, registers, pc); break;
+		case 0x94: return op_res(registers.H, 2, flags, registers, pc); break;
+		case 0x95: return op_res(registers.L, 2, flags, registers, pc); break;
+		case 0x96: return op_res(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 4); break;
+		case 0x97: return op_res(registers.A, 2, flags, registers, pc); break;
+		case 0x98: return op_res(registers.B, 3, flags, registers, pc); break;
+		case 0x99: return op_res(registers.C, 3, flags, registers, pc); break;
+		case 0x9a: return op_res(registers.D, 3, flags, registers, pc); break;
+		case 0x9b: return op_res(registers.E, 3, flags, registers, pc); break;
+		case 0x9c: return op_res(registers.H, 3, flags, registers, pc); break;
+		case 0x9d: return op_res(registers.L, 3, flags, registers, pc); break;
+		case 0x9e: return op_res(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 4); break;
+		case 0x9f: return op_res(registers.A, 3, flags, registers, pc); break;
+		case 0xa0: return op_res(registers.B, 4, flags, registers, pc); break;
+		case 0xa1: return op_res(registers.C, 4, flags, registers, pc); break;
+		case 0xa2: return op_res(registers.D, 4, flags, registers, pc); break;
+		case 0xa3: return op_res(registers.E, 4, flags, registers, pc); break;
+		case 0xa4: return op_res(registers.H, 4, flags, registers, pc); break;
+		case 0xa5: return op_res(registers.L, 4, flags, registers, pc); break;
+		case 0xa6: return op_res(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 4); break;
+		case 0xa7: return op_res(registers.A, 4, flags, registers, pc); break;
+		case 0xa8: return op_res(registers.B, 5, flags, registers, pc); break;
+		case 0xa9: return op_res(registers.C, 5, flags, registers, pc); break;
+		case 0xaa: return op_res(registers.D, 5, flags, registers, pc); break;
+		case 0xab: return op_res(registers.E, 5, flags, registers, pc); break;
+		case 0xac: return op_res(registers.H, 5, flags, registers, pc); break;
+		case 0xad: return op_res(registers.L, 5, flags, registers, pc); break;
+		case 0xae: return op_res(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 4); break;
+		case 0xaf: return op_res(registers.A, 5, flags, registers, pc); break;
+		case 0xb0: return op_res(registers.B, 6, flags, registers, pc); break;
+		case 0xb1: return op_res(registers.C, 6, flags, registers, pc); break;
+		case 0xb2: return op_res(registers.D, 6, flags, registers, pc); break;
+		case 0xb3: return op_res(registers.E, 6, flags, registers, pc); break;
+		case 0xb4: return op_res(registers.H, 6, flags, registers, pc); break;
+		case 0xb5: return op_res(registers.L, 6, flags, registers, pc); break;
+		case 0xb6: return op_res(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 4); break;
+		case 0xb7: return op_res(registers.A, 6, flags, registers, pc); break;
+		case 0xb8: return op_res(registers.B, 7, flags, registers, pc); break;
+		case 0xb9: return op_res(registers.C, 7, flags, registers, pc); break;
+		case 0xba: return op_res(registers.D, 7, flags, registers, pc); break;
+		case 0xbb: return op_res(registers.E, 7, flags, registers, pc); break;
+		case 0xbc: return op_res(registers.H, 7, flags, registers, pc); break;
+		case 0xbd: return op_res(registers.L, 7, flags, registers, pc); break;
+		case 0xbe: return op_res(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 4); break;
+		case 0xbf: return op_res(registers.A, 7, flags, registers, pc); break;
 
 		//	SET - L2 - T8 - ////
 		//	Set Bit
-		case 0xc0: op_set(registers.B, 0, flags, registers, pc); break;
-		case 0xc1: op_set(registers.C, 0, flags, registers, pc); break;
-		case 0xc2: op_set(registers.D, 0, flags, registers, pc); break;
-		case 0xc3: op_set(registers.E, 0, flags, registers, pc); break;
-		case 0xc4: op_set(registers.H, 0, flags, registers, pc); break;
-		case 0xc5: op_set(registers.L, 0, flags, registers, pc); break;
-		case 0xc7: op_set(registers.A, 0, flags, registers, pc); break;
-		case 0xc8: op_set(registers.B, 1, flags, registers, pc); break;
-		case 0xc9: op_set(registers.C, 1, flags, registers, pc); break;
-		case 0xca: op_set(registers.D, 1, flags, registers, pc); break;
-		case 0xcb: op_set(registers.E, 1, flags, registers, pc); break;
-		case 0xcc: op_set(registers.H, 1, flags, registers, pc); break;
-		case 0xcd: op_set(registers.L, 1, flags, registers, pc); break;
-		case 0xcf: op_set(registers.A, 1, flags, registers, pc); break;
-		case 0xd0: op_set(registers.B, 2, flags, registers, pc); break;
-		case 0xd1: op_set(registers.C, 2, flags, registers, pc); break;
-		case 0xd2: op_set(registers.D, 2, flags, registers, pc); break;
-		case 0xd3: op_set(registers.E, 2, flags, registers, pc); break;
-		case 0xd4: op_set(registers.H, 2, flags, registers, pc); break;
-		case 0xd5: op_set(registers.L, 2, flags, registers, pc); break;
-		case 0xd7: op_set(registers.A, 2, flags, registers, pc); break;
-		case 0xd8: op_set(registers.B, 3, flags, registers, pc); break;
-		case 0xd9: op_set(registers.C, 3, flags, registers, pc); break;
-		case 0xda: op_set(registers.D, 3, flags, registers, pc); break;
-		case 0xdb: op_set(registers.E, 3, flags, registers, pc); break;
-		case 0xdc: op_set(registers.H, 3, flags, registers, pc); break;
-		case 0xdd: op_set(registers.L, 3, flags, registers, pc); break;
-		case 0xdf: op_set(registers.A, 3, flags, registers, pc); break;
-		case 0xe0: op_set(registers.B, 4, flags, registers, pc); break;
-		case 0xe1: op_set(registers.C, 4, flags, registers, pc); break;
-		case 0xe2: op_set(registers.D, 4, flags, registers, pc); break;
-		case 0xe3: op_set(registers.E, 4, flags, registers, pc); break;
-		case 0xe4: op_set(registers.H, 4, flags, registers, pc); break;
-		case 0xe5: op_set(registers.L, 4, flags, registers, pc); break;
-		case 0xe7: op_set(registers.A, 4, flags, registers, pc); break;
-		case 0xe8: op_set(registers.B, 5, flags, registers, pc); break;
-		case 0xe9: op_set(registers.C, 5, flags, registers, pc); break;
-		case 0xea: op_set(registers.D, 5, flags, registers, pc); break;
-		case 0xeb: op_set(registers.E, 5, flags, registers, pc); break;
-		case 0xec: op_set(registers.H, 5, flags, registers, pc); break;
-		case 0xed: op_set(registers.L, 5, flags, registers, pc); break;
-		case 0xef: op_set(registers.A, 5, flags, registers, pc); break;
-		case 0xf0: op_set(registers.B, 6, flags, registers, pc); break;
-		case 0xf1: op_set(registers.C, 6, flags, registers, pc); break;
-		case 0xf2: op_set(registers.D, 6, flags, registers, pc); break;
-		case 0xf3: op_set(registers.E, 6, flags, registers, pc); break;
-		case 0xf4: op_set(registers.H, 6, flags, registers, pc); break;
-		case 0xf5: op_set(registers.L, 6, flags, registers, pc); break;
-		case 0xf7: op_set(registers.A, 6, flags, registers, pc); break;
-		case 0xf8: op_set(registers.B, 7, flags, registers, pc); break;
-		case 0xf9: op_set(registers.C, 7, flags, registers, pc); break;
-		case 0xfa: op_set(registers.D, 7, flags, registers, pc); break;
-		case 0xfb: op_set(registers.E, 7, flags, registers, pc); break;
-		case 0xfc: op_set(registers.H, 7, flags, registers, pc); break;
-		case 0xfd: op_set(registers.L, 7, flags, registers, pc); break;
-		case 0xff: op_set(registers.A, 7, flags, registers, pc); break;
+		case 0xc0: return op_set(registers.B, 0, flags, registers, pc); break;
+		case 0xc1: return op_set(registers.C, 0, flags, registers, pc); break;
+		case 0xc2: return op_set(registers.D, 0, flags, registers, pc); break;
+		case 0xc3: return op_set(registers.E, 0, flags, registers, pc); break;
+		case 0xc4: return op_set(registers.H, 0, flags, registers, pc); break;
+		case 0xc5: return op_set(registers.L, 0, flags, registers, pc); break;
+		case 0xc7: return op_set(registers.A, 0, flags, registers, pc); break;
+		case 0xc8: return op_set(registers.B, 1, flags, registers, pc); break;
+		case 0xc9: return op_set(registers.C, 1, flags, registers, pc); break;
+		case 0xca: return op_set(registers.D, 1, flags, registers, pc); break;
+		case 0xcb: return op_set(registers.E, 1, flags, registers, pc); break;
+		case 0xcc: return op_set(registers.H, 1, flags, registers, pc); break;
+		case 0xcd: return op_set(registers.L, 1, flags, registers, pc); break;
+		case 0xcf: return op_set(registers.A, 1, flags, registers, pc); break;
+		case 0xd0: return op_set(registers.B, 2, flags, registers, pc); break;
+		case 0xd1: return op_set(registers.C, 2, flags, registers, pc); break;
+		case 0xd2: return op_set(registers.D, 2, flags, registers, pc); break;
+		case 0xd3: return op_set(registers.E, 2, flags, registers, pc); break;
+		case 0xd4: return op_set(registers.H, 2, flags, registers, pc); break;
+		case 0xd5: return op_set(registers.L, 2, flags, registers, pc); break;
+		case 0xd7: return op_set(registers.A, 2, flags, registers, pc); break;
+		case 0xd8: return op_set(registers.B, 3, flags, registers, pc); break;
+		case 0xd9: return op_set(registers.C, 3, flags, registers, pc); break;
+		case 0xda: return op_set(registers.D, 3, flags, registers, pc); break;
+		case 0xdb: return op_set(registers.E, 3, flags, registers, pc); break;
+		case 0xdc: return op_set(registers.H, 3, flags, registers, pc); break;
+		case 0xdd: return op_set(registers.L, 3, flags, registers, pc); break;
+		case 0xdf: return op_set(registers.A, 3, flags, registers, pc); break;
+		case 0xe0: return op_set(registers.B, 4, flags, registers, pc); break;
+		case 0xe1: return op_set(registers.C, 4, flags, registers, pc); break;
+		case 0xe2: return op_set(registers.D, 4, flags, registers, pc); break;
+		case 0xe3: return op_set(registers.E, 4, flags, registers, pc); break;
+		case 0xe4: return op_set(registers.H, 4, flags, registers, pc); break;
+		case 0xe5: return op_set(registers.L, 4, flags, registers, pc); break;
+		case 0xe7: return op_set(registers.A, 4, flags, registers, pc); break;
+		case 0xe8: return op_set(registers.B, 5, flags, registers, pc); break;
+		case 0xe9: return op_set(registers.C, 5, flags, registers, pc); break;
+		case 0xea: return op_set(registers.D, 5, flags, registers, pc); break;
+		case 0xeb: return op_set(registers.E, 5, flags, registers, pc); break;
+		case 0xec: return op_set(registers.H, 5, flags, registers, pc); break;
+		case 0xed: return op_set(registers.L, 5, flags, registers, pc); break;
+		case 0xef: return op_set(registers.A, 5, flags, registers, pc); break;
+		case 0xf0: return op_set(registers.B, 6, flags, registers, pc); break;
+		case 0xf1: return op_set(registers.C, 6, flags, registers, pc); break;
+		case 0xf2: return op_set(registers.D, 6, flags, registers, pc); break;
+		case 0xf3: return op_set(registers.E, 6, flags, registers, pc); break;
+		case 0xf4: return op_set(registers.H, 6, flags, registers, pc); break;
+		case 0xf5: return op_set(registers.L, 6, flags, registers, pc); break;
+		case 0xf7: return op_set(registers.A, 6, flags, registers, pc); break;
+		case 0xf8: return op_set(registers.B, 7, flags, registers, pc); break;
+		case 0xf9: return op_set(registers.C, 7, flags, registers, pc); break;
+		case 0xfa: return op_set(registers.D, 7, flags, registers, pc); break;
+		case 0xfb: return op_set(registers.E, 7, flags, registers, pc); break;
+		case 0xfc: return op_set(registers.H, 7, flags, registers, pc); break;
+		case 0xfd: return op_set(registers.L, 7, flags, registers, pc); break;
+		case 0xff: return op_set(registers.A, 7, flags, registers, pc); break;
 
 		//	SET nr, (HL) - L2 - T16 - ////
-		case 0xc6: op_set(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc); break;
-		case 0xce: op_set(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc); break;
-		case 0xd6: op_set(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc); break;
-		case 0xde: op_set(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc); break;
-		case 0xe6: op_set(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc); break;
-		case 0xee: op_set(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc); break;
-		case 0xf6: op_set(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc); break;
-		case 0xfe: op_set(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc); break;
+		case 0xc6: return op_set(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 4); break;
+		case 0xce: return op_set(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 4); break;
+		case 0xd6: return op_set(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 4); break;
+		case 0xde: return op_set(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 4); break;
+		case 0xe6: return op_set(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 4); break;
+		case 0xee: return op_set(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 4); break;
+		case 0xf6: return op_set(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 4); break;
+		case 0xfe: return op_set(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 4); break;
 
 		default:
 			printf("Unsupported CB-prefixed opcode: 0x%02x at 0x%04x\n\n\n", memory[pc + 1], pc);
