@@ -23,6 +23,13 @@ int tiledata;
 int tilenr, colorval, colorfrompal;
 int row, xoff, yoff;
 
+int COLORS[] = {
+		0xff,
+		0xaa,
+		0x55,
+		0x00
+};
+
 void initPPU() {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
@@ -39,12 +46,6 @@ SDL_Window* getWindow() {
 }
 
 void createBGMap(unsigned char memory[]) {
-	int colors[] = {
-		0xff,
-		0xaa,
-		0x55,
-		0x00
-	};
 	tilemap = (((memory[0xff40] >> 3) & 1) == 1) ? 0x9c00 : 0x9800;		//	check which location was set in LCDC for BG Map
 	tiledata = (((memory[0xff40] >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
 	for (int i = 0; i < 256; i++) {
@@ -60,9 +61,9 @@ void createBGMap(unsigned char memory[]) {
 			//	get real color from palette
 			colorfrompal = ( memory[0xff47] >> (2 * colorval) ) & 3;
 			//printf("%d ", colorfrompal);
-			bgmap[(i * 256 * 3) + (j * 3)] = colors[colorfrompal];
-			bgmap[(i * 256 * 3) + (j * 3) + 1] = colors[colorfrompal];
-			bgmap[(i * 256 * 3) + (j * 3) + 2] = colors[colorfrompal];
+			bgmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
+			bgmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
+			bgmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
 		}
 	}
 }
@@ -74,12 +75,6 @@ void createWindow(unsigned char memory[]) {
 		0: $9800-$9BFF
 		1: $9C00-$9FFF
 	*/
-	int colors[] = {
-		0xff,
-		0xaa,
-		0x55,
-		0x00
-	};
 	tilemap = (((memory[0xff40] >> 5) & 1) == 1) ? 0x9c00 : 0x9800;	//	check which location was set in LCDC for BG Map
 	tiledata = (((memory[0xff40] >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
 	for (int i = 0; i < 256; i++) {
@@ -94,21 +89,14 @@ void createWindow(unsigned char memory[]) {
 			}
 			//	get real color from palette
 			colorfrompal = (memory[0xff47] >> (2 * colorval)) & 3;
-			winmap[(i * 256 * 3) + (j * 3)] = colors[colorfrompal];
-			winmap[(i * 256 * 3) + (j * 3) + 1] = colors[colorfrompal];
-			winmap[(i * 256 * 3) + (j * 3) + 2] = colors[colorfrompal];
+			winmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
+			winmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
+			winmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
 		}
 	}
 }
 
 void createSpriteMap(unsigned char memory[]) {
-
-	int colors[] = {
-		0xff,
-		0xaa,
-		0x55,
-		0x00
-	};
 
 	uint16_t pat = 0x8000;	//	sprite pattern table
 	uint16_t oam = 0xfe00;	//	oam ( sprite attribute table ); 0xfe00 - 0xfe9f; divided into 40 blocks, 4 bytes each
@@ -128,9 +116,9 @@ void createSpriteMap(unsigned char memory[]) {
 
 				//	get real color from palette
 				colorfrompal = (memory[0xff48] >> (2 * colorval)) & 3;
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = colors[colorfrompal];
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = colors[colorfrompal];
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = colors[colorfrompal];
+				spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
+				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
+				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
 			}
 		printf("object ");
 	}
@@ -238,9 +226,10 @@ void drawBGTileset(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window* 
 				//	0xff47 is the adress of the BG / Window palette
 				int x = (7 - b) + 8 * ((i - 0x8000) % 256) / 16;
 				int y = 8 * ((i - 0x8000) / 256) + (j / 2);
-				tFramebuffer[(y * 128 * 3) + (x * 3)] = (memory[0xff47] >> (2 * line[b]) & 0xff);
-				tFramebuffer[(y * 128 * 3) + (x * 3) + 1] = (memory[0xff47] >> (2 * line[b]) & 0xff);
-				tFramebuffer[(y * 128 * 3) + (x * 3) + 2] = (memory[0xff47] >> (2 * line[b]) & 0xff);
+				colorfrompal = (memory[0xff48] >> (2 * colorval)) & 3;
+				tFramebuffer[(y * 128 * 3) + (x * 3)] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
+				tFramebuffer[(y * 128 * 3) + (x * 3) + 1] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
+				tFramebuffer[(y * 128 * 3) + (x * 3) + 2] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
 			}
 		}
 	}

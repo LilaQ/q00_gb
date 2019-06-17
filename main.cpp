@@ -78,7 +78,7 @@ unsigned char gameboyBootROM[256] = {
 
 //	Debug Vars
 unsigned char cartridge[0x10000];	//	64kb buffer (so max 64kb cartridges are supported for now with this buffer)
-const char* filename = "bgbtest.gb";
+const char* filename = "tetris.gb";
 
 /*	blargg's tests filesnames:
 
@@ -117,6 +117,29 @@ void handleWindowEvents(SDL_Event event);
 void handleInterrupts();
 void handleControls(unsigned char memory[]);
 void printDebug();
+int main();
+
+//	reset Gameboy
+void resetGameboy() {
+
+	//	stop ppu
+	stopPPU();
+
+	//	reset vars
+	pc = 0x0000;
+	sp = 0x0000;
+	joypad = 0xff;
+	memory[0x10000];
+	interrupts_enabled = 0;
+	registers = Registers();
+	flags = Flags();
+	ROMloaded = 1;
+	timer_clocksum = 0;
+	div_clocksum = 0;
+
+	//	call main again
+	main();
+}
 
 int main() {
 
@@ -392,6 +415,7 @@ void initWindow() {
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "Help");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "Debugger");
 	AppendMenu(hFile, MF_STRING, 0, "Load ROM");
+	AppendMenu(hFile, MF_STRING, 7, "» Reset");
 	AppendMenu(hFile, MF_STRING, 1, "Exit");
 	AppendMenu(hEdit, MF_STRING, 2, "Configure Controls");
 	AppendMenu(hHelp, MF_STRING, 3, "About");
@@ -434,6 +458,10 @@ void handleWindowEvents( SDL_Event event) {
 					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
 					SDL_SetWindowSize(tWindow, 512, 512);
 					drawSpriteMap(memory, tRenderer, tWindow);
+				}
+				//	Reset
+				if (LOWORD(event.syswm.msg->msg.win.wParam) == 7) {
+					resetGameboy();
 				}
 			}
 			//	close a window
