@@ -76,61 +76,25 @@ unsigned char gameboyBootROM[256] = {
 	0x3E, 0x01, 0xE0, 0x50
 };
 
-uint8_t timings[256] = {
-	1,3,2,2,1,1,2,1,5,2,2,2,1,1,2,1,
-	0,3,2,2,1,1,2,1,3,2,2,2,1,1,2,1,
-	2,3,2,2,1,1,2,1,2,2,2,2,1,1,2,1,
-	2,3,2,2,3,3,3,1,2,2,2,2,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	2,2,2,2,2,2,0,2,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	1,1,1,1,1,1,2,1,1,1,1,1,1,1,2,1,
-	2,3,3,4,3,4,2,4,2,4,3,0,3,6,2,4,
-	2,3,3,0,3,4,2,4,2,4,3,0,3,0,2,4,
-	3,3,2,0,0,4,2,4,4,1,4,0,0,0,2,4,
-	3,3,2,1,0,4,2,4,3,2,4,1,0,0,2,4
-};
-
-uint8_t timings_cb[256] = {
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,3,2,2,2,2,2,2,2,3,2,
-	2,2,2,2,2,2,3,2,2,2,2,2,2,2,3,2,
-	2,2,2,2,2,2,3,2,2,2,2,2,2,2,3,2,
-	2,2,2,2,2,2,3,2,2,2,2,2,2,2,3,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2,
-	2,2,2,2,2,2,4,2,2,2,2,2,2,2,4,2
-};
-
 //	Debug Vars
-unsigned char cartridge[0xFFFF];	//	64kb buffer (so max 64kb cartridges are supported for now with this buffer)
-const char* filename = "instr_timing.gb";
+unsigned char cartridge[0x10000];	//	64kb buffer (so max 64kb cartridges are supported for now with this buffer)
+const char* filename = "bgbtest.gb";
 
 /*	blargg's tests filesnames:
 
-	01 - passed
-	02 - passed
-	03 - passed
-	04 - passed
-	05 - passed
-	06 - passed
-	07 - passed
-	08 - passed
-	09 - passed
-	10 - passed
-	11 - passed
+	01 - passed (special)
+	02 - passed (interrupts)
+	03 - passed (op sp, hl)
+	04 - passed (op r, imm)
+	05 - passed (op rp)
+	06 - passed (ld r, r)
+	07 - passed (jr, jp, call, ret, rst)
+	08 - passed (misc instructions)
+	09 - passed (op r, r)
+	10 - passed (bit ops)
+	11 - passed (op a, (hl))
+
+	inst_timing - passed
 */
 
 //	Main Vars
@@ -138,6 +102,7 @@ SDL_Window* mainWindow;				//	Main Window
 SDL_Event event;					//	Eventhandler for all SDL events
 uint16_t pc = 0x0000;				//	Program Counter; our pointer that points to the current opcode; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint16_t sp = 0x0000;				//	Stack Pointer; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
+uint8_t joypad = 0xff;				//	Storage for the joycon inputs
 unsigned char memory[0x10000];		//	Memory
 int interrupts_enabled = 0;
 Registers registers;
@@ -145,12 +110,13 @@ Flags flags;
 bool ROMloaded = 1;
 int timer_clocksum = 0;
 int div_clocksum = 0;
-int tmp = 0;
 
 void initWindow();
 void handleTimer(int clocks);
 void handleWindowEvents(SDL_Event event);
 void handleInterrupts();
+void handleControls(unsigned char memory[]);
+void printDebug();
 
 int main() {
 
@@ -179,8 +145,7 @@ int main() {
 	fclose(file);
 
 	//	copy cartridge to memory
-	for (int i = 0; i < sizeof(memory); i++)
-	{
+	for (int i = 0; i < sizeof(memory); i++) {
 		memory[i] = cartridge[i];
 	}
 
@@ -197,7 +162,7 @@ int main() {
 
 	//	init timers
 	auto t_start = std::chrono::high_resolution_clock::now();
-
+	int enlog = 0;
 	//	start CPU
 	while (1) {
 		//	reset timer
@@ -218,26 +183,38 @@ int main() {
 			//	process cpu if system is not HALTed
 			int sum = 0;
 			int cycle = 0;
+			uint16_t last = 0;
+			uint16_t lpc = 0;
 			while (sum < (70224 / 4 / 154)) {
 				//	run cpu if not halted
 				if (!flags.HALT) {
-					//	normal timings table
-					if (pc != 0xcb) {
-						sum += timings[memory[pc]];
-						cycle = timings[memory[pc]];
-					}
-					//	cb-timings table
-					else {
-						sum += timings_cb[memory[pc + 1]];
-						cycle = timings_cb[memory[pc + 1]];
-					}
+					//if(enlog)
+					//	printDebug();
+
+					lpc = pc;
+					last = memory[0xff40];
+					if (pc == 0x005d)
+						printf("break");
+
 					//	process the instruction
-					processOpcode(pc, sp, memory, registers, flags, interrupts_enabled);
+					cycle = processOpcode(pc, sp, memory, registers, flags, interrupts_enabled);
+					sum += cycle;
+
+					if (last != memory[0xff40]) {
+						last = memory[0xff40];
+						printf("0x%04x: changed LCDC to 0x%02x\n", lpc, memory[0xff40]);
+					}
+
+					if (pc == 0x100)
+						enlog = 1;
+
+					//if(pc == 0x02cf && enlog)
+					//	std::exit(EXIT_FAILURE);
 				}
 				//	if system is halted just idle, but still commence timers and condition for while loop
 				else {
-					sum += timings[0x00];		//	NOP
-					cycle = timings[0x00];
+					sum += 1;		//	NOP
+					cycle = 1;
 				}
 
 				//	handle timer
@@ -247,16 +224,22 @@ int main() {
 				handleInterrupts();
 
 				//	blarggs test - serial output
-				if (memory[0xff02] == 0x81) {
+				/*if (memory[0xff02] == 0x81) {
 					char c = memory[0xff01];
 					printf("%c", c);
 					memory[0xff02] = 0x0;
-				}
+				}*/
+
+				//	set controls
+				memory[0xff00] = joypad;
+
 			}
-			
-			//	handle window events
+
+			//	handle window events & controls
 			handleWindowEvents(event);
 		}
+
+		
 
 		//	sleep for proper cpu timing (per frame)
 		auto t_end = std::chrono::high_resolution_clock::now();
@@ -264,7 +247,7 @@ int main() {
 		std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));
 
 		//	lock ROM, load first 100 bytes from cartridge onces booted
-		if (memory[0xff50] == 0x01 && ROMloaded) {
+		if (ROMloaded && memory[0xff50] == 0x01) {
 			for (int i = 0; i < sizeof(gameboyBootROM); i++) {
 				memory[i] = cartridge[i];
 			}
@@ -278,9 +261,43 @@ int main() {
 	return 0;
 }
 
+void handleControls(unsigned char memory[]) {
+	/*uint8_t ar[256];
+	GetKeyboardState(ar);
+	memory[0xff00] = 0xff;*/
+	/*if (GetAsyncKeyState(VK_RIGHT)	& 0x8000)	{ memory[0xff00] |= 0x01; }
+	if (GetAsyncKeyState(VK_LEFT)	& 0x8000)	{ memory[0xff00] |= 0x02; }
+	if (GetAsyncKeyState(VK_UP)		& 0x8000)	{ memory[0xff00] |= 0x04; }
+	if (GetAsyncKeyState(VK_DOWN)	& 0x8000)	{ memory[0xff00] |= 0x08; }
+	if (GetAsyncKeyState(VK_RIGHT)	& 0x8000)	{ memory[0xff00] |= 0x01; }
+	if (GetAsyncKeyState('A')		& 0x8000)	{ memory[0xff00] ^= 0x01; }
+	if (GetAsyncKeyState('S')		& 0x8000)	{ memory[0xff00] ^= 0x02; }
+	if (GetAsyncKeyState('Y')		& 0x8000)	{ memory[0xff00] ^= 0x04; }
+	if (GetAsyncKeyState('X')		& 0x8000)	{ memory[0xff00] ^= 0x08; }*/
+}
+
+void printDebug() {
+	printf(
+		"PC: %04X, AF: %04X, BC: %04X, DE: %04X, HL: %04X, SP: %04X, LCDC: %04X",
+		pc,
+		(registers.A << 8) | (flags.Z << 7 | flags.N << 6 | flags.H << 5 | flags.C << 4),
+		(registers.B << 8) | registers.C,
+		(registers.D << 8) | registers.E,
+		(registers.H << 8) | registers.L,
+		sp,
+		memory[0xff40]
+	);
+
+	printf("\t(%02X %02X %02X)\n",
+		memory[pc],
+		memory[pc + 1],
+		memory[pc + 2]
+	);
+}
+
 void handleTimer(int cycle) {
 	//	set divider
-	div_clocksum += cycle * 4;
+	div_clocksum += cycle;
 	if (div_clocksum >= 256) {
 		div_clocksum -= 256;
 		memory[0xff04]++;
@@ -299,6 +316,8 @@ void handleTimer(int cycle) {
 			freq = 65536;
 		else if ((memory[0xff07] & 3) == 3)	//	mask last 2 bits
 			freq = 16384;
+
+		//printf("%d\n", freq);
 
 		//	increment the timer according to the frequency (synched to the processed opcodes)
 		while (timer_clocksum >= (4194304 / freq)) {
@@ -320,7 +339,6 @@ void handleInterrupts() {
 	//	unHALT the system, once we have any interrupt
 	if (memory[0xffff] & memory[0xff0f] && flags.HALT) {
 		flags.HALT = 0;
-		printf("unHALTed");
 	}
 
 	//	handle interrupts
@@ -336,18 +354,17 @@ void handleInterrupts() {
 				sp--;
 				memory[sp] = pc & 0xff;
 				pc = 0x40;
-				memory[0xff0f] &= 0xff & ~1;
+				memory[0xff0f] &= ~1;
 			}
 
 			//	timer interrupt
 			else if ((memory[0xffff] & 4) & (memory[0xff0f] & 4)) {
-				printf("you shouldn't be able to see this line!\n");
 				sp--;
 				memory[sp] = pc >> 8;
 				sp--;
 				memory[sp] = pc & 0xff;
 				pc = 0x50;
-				memory[0xff0f] &= 0xff & ~4;
+				memory[0xff0f] &= ~4;
 			}
 
 			//	clear main interrupts_enable and corresponding flag
@@ -380,6 +397,7 @@ void initWindow() {
 	AppendMenu(hHelp, MF_STRING, 3, "About");
 	AppendMenu(hDebugger, MF_STRING, 4, "» Tile Map");
 	AppendMenu(hDebugger, MF_STRING, 5, "» BG Map");
+	AppendMenu(hDebugger, MF_STRING, 6, "» Sprite Map");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -409,12 +427,50 @@ void handleWindowEvents( SDL_Event event) {
 					SDL_SetWindowSize(tWindow, 512, 512);
 					drawBGMap(memory, tRenderer, tWindow);
 				}
+				//	Sprite Map
+				if (LOWORD(event.syswm.msg->msg.win.wParam) == 6) {
+					SDL_Window* tWindow;
+					SDL_Renderer* tRenderer;
+					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
+					SDL_SetWindowSize(tWindow, 512, 512);
+					drawSpriteMap(memory, tRenderer, tWindow);
+				}
 			}
 			//	close a window
 			if (event.syswm.msg->msg.win.msg == WM_CLOSE) {
 				DestroyWindow(event.syswm.msg->msg.win.hwnd);
 				PostMessage(event.syswm.msg->msg.win.hwnd, WM_CLOSE, 0, 0);
 			}
+			break;
+		case SDL_KEYUP:
+		case SDL_KEYDOWN:
+			//	reset controlls
+			joypad = 0xff;
+			joypad |= 0x10;
+			//	left key
+			if (event.key.keysym.scancode == SDL_SCANCODE_LEFT && event.key.state == SDL_PRESSED)
+				joypad ^= 0x91;
+			//	right key
+			if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT && event.key.state == SDL_PRESSED)
+				joypad ^= 0x92;
+			//	up key
+			if (event.key.keysym.scancode == SDL_SCANCODE_UP && event.key.state == SDL_PRESSED)
+				joypad ^= 0x93;
+			//	down key
+			if (event.key.keysym.scancode == SDL_SCANCODE_DOWN && event.key.state == SDL_PRESSED)
+				joypad ^= 0x94;
+			//	A key
+			if (event.key.keysym.scancode == SDL_SCANCODE_A && event.key.state == SDL_PRESSED)
+				joypad ^= 0x01;
+			//	B key
+			if (event.key.keysym.scancode == SDL_SCANCODE_S && event.key.state == SDL_PRESSED)
+				joypad ^= 0x02;
+			//	Select key
+			if (event.key.keysym.scancode == SDL_SCANCODE_X && event.key.state == SDL_PRESSED)
+				joypad ^= 0x04;
+			//	Start key
+			if (event.key.keysym.scancode == SDL_SCANCODE_Y && event.key.state == SDL_PRESSED)
+				joypad ^= 0x08;
 			break;
 	};
 }

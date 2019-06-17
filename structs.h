@@ -20,3 +20,10 @@ struct Flags
 	unsigned char C;			//	CARRY FLAG; set to 1 if a carry occured in the last operation or if A is the smaller value on CP instruction
 	bool HALT;
 };
+
+enum HL_ACTION {
+	DECREMENT = 1,
+	INCREMENT = 2,
+	WRITE_TO_HL = 4,
+	READ_FROM_HL = 8
+};
