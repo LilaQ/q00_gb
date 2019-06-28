@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <cstdlib>
 #include <cstdint>
+#include "mmu.h"
 #include "structs.h"
 #define DEBUG_
 unsigned char opcode;
@@ -52,8 +53,8 @@ int op_ld(unsigned char& parameter, unsigned char& val, Flags& flags, Registers&
 
 //	LD (XY), Z
 //	Load Z to adress (XY)
-int op_ld_to_adr(uint16_t adr, unsigned char& val, unsigned char memory[], uint16_t& pc, int m = 2, int steps = 1) {
-	memory[adr] = val;
+int op_ld_to_adr(uint16_t adr, unsigned char& val, uint16_t& pc, int m = 2, int steps = 1) {
+	writeToMem(adr, val);
 	pc += steps;
 	//	return m-cycles;
 	return m;
@@ -144,14 +145,14 @@ int op_rr(unsigned char& parameter, Flags& flags, Registers& registers, uint16_t
 
 //	RST 
 //	RST
-int op_rst(uint8_t add, uint16_t& pc, uint16_t &sp, unsigned char memory[]) {
+int op_rst(uint8_t add, uint16_t& pc, uint16_t &sp) {
 #ifdef DEBUG
 	printf("RST");
 #endif // DEBUG
 	sp--;
-	memory[sp] = (pc + 1) >> 8;
+	writeToMem(sp, (pc + 1) >> 8);
 	sp--;
-	memory[sp] = (pc + 1) & 0xff;
+	writeToMem(sp, (pc + 1) & 0xff);
 	pc = add;
 
 	//	return m-cycles
@@ -295,13 +296,13 @@ int op_xor(unsigned char& parameter, Flags& flags, Registers& registers, uint16_
 
 //	POP XY
 //	Pops 2 bytes from stack into paired registers
-int op_pop(unsigned char& hi, unsigned char& lo, unsigned char memory[], uint16_t& pc, uint16_t& sp) {
+int op_pop(unsigned char& hi, unsigned char& lo, uint16_t& pc, uint16_t& sp) {
 #ifdef DEBUG
 	printf("POP");
 #endif // DEBUG
-	lo = memory[sp];
+	lo = readFromMem(sp);
 	sp++;
-	hi = memory[sp];
+	hi = readFromMem(sp);
 	sp++;
 	pc += 1;
 
@@ -311,14 +312,14 @@ int op_pop(unsigned char& hi, unsigned char& lo, unsigned char memory[], uint16_
 
 //	PUSH XY
 //	Pushes 2 bytes to the stack
-int op_push(unsigned char& hi, unsigned char& lo, unsigned char memory[], uint16_t& pc, uint16_t& sp) {
+int op_push(unsigned char& hi, unsigned char& lo, uint16_t& pc, uint16_t& sp) {
 #ifdef DEBUG
 	printf("PUSH BC");
 #endif // DEBUG
 	sp--;
-	memory[sp] = hi;
+	writeToMem(sp, hi);
 	sp--;
-	memory[sp] = lo;
+	writeToMem(sp, lo);
 	pc += 1;
 
 	//	return m-cycles 
@@ -513,12 +514,12 @@ int op_rra(Flags& flags, Registers& registers, uint16_t& pc, int keepoldflag = 0
 
 //	RET / RETI / RET Z / RET NZ / RET C / RET NC
 //	return, with options (enable interrupts, on zero / not zero, on carry / not carry)
-int op_ret(int& ime, int state, int condition_state, uint16_t& pc, uint16_t& sp, unsigned char memory[], unsigned char condition, int enable_condition = 0) {
+int op_ret(int& ime, int state, int condition_state, uint16_t& pc, uint16_t& sp, unsigned char condition, int enable_condition = 0) {
 #ifdef DEBUG
 	printf("RET/I/NZ/Z/NC/C", (memory[sp + 1] << 8) | memory[sp]);
 #endif // DEBUG
 	if (!enable_condition || (enable_condition && condition == condition_state)) {
-		pc = (memory[sp + 1] << 8) | memory[sp];
+		pc = (readFromMem(sp + 1) << 8) | readFromMem(sp);
 		sp += 2;
 	}
 	else {
@@ -548,6 +549,8 @@ int op_jp(uint16_t& pc, uint16_t adr, int enable_condition, unsigned char condit
 //	JR / JR C / JR NC / JR Z / JR NZ
 int op_jr(uint16_t& pc, int8_t adr, int enable_condition, unsigned char condition, int condition_state) {
 	if (!enable_condition || (enable_condition && (condition == condition_state))) {
+		if (pc == 0x2000)
+			int i = 0;
 		pc += 2 + adr;
 		return 3;
 	}
@@ -646,13 +649,13 @@ int op_daa(Flags& flags, Registers& registers, uint16_t& pc) {
 
 //	CALL / CALL Z / CALL NZ / CALL C / CALL NC
 //	pushes next instruction adress to the stack, and jumps to the new adress
-int op_call(uint16_t& pc, uint16_t& sp, unsigned char memory[], int enable_condition, unsigned char condition, int condition_state) {
+int op_call(uint16_t& pc, uint16_t& sp, int enable_condition, unsigned char condition, int condition_state) {
 	if (!enable_condition || (condition == condition_state)) {
 		sp--;
-		memory[sp] = (pc + 3) >> 8;
+		writeToMem(sp, (pc + 3) >> 8);
 		sp--;
-		memory[sp] = (pc + 3) & 0xff;
-		pc = ((memory[pc + 2] << 8) | memory[pc + 1]);
+		writeToMem(sp, (pc + 3) & 0xff);
+		pc = ((readFromMem(pc + 2) << 8) | readFromMem(pc + 1));
 	}
 	else
 	{
@@ -666,10 +669,7 @@ int op_call(uint16_t& pc, uint16_t& sp, unsigned char memory[], int enable_condi
 
 //	LD RR, u16
 //	loads u16 into a paired register
-int op_ld_rr_u16(uint16_t& pc, unsigned char memory[], unsigned char& hi, unsigned char& lo, unsigned char shi, unsigned slo) {
-#ifdef DEBUG
-	printf("LD BC,0x%04x", (memory[pc + 2] << 8) | memory[pc + 1]);
-#endif // DEBUG
+int op_ld_rr_u16(uint16_t& pc, unsigned char& hi, unsigned char& lo, unsigned char shi, unsigned slo) {
 	hi = shi;
 	lo = slo;
 	pc += 3;
@@ -679,7 +679,7 @@ int op_ld_rr_u16(uint16_t& pc, unsigned char memory[], unsigned char& hi, unsign
 
 //	LD SP u16
 //	loads the next two bytes into the stackpointer (SP)
-int op_ld_sp_u16(uint16_t& pc, unsigned char memory[], uint16_t& sp, unsigned char shi, unsigned slo, int m = 3, int step = 3) {
+int op_ld_sp_u16(uint16_t& pc, uint16_t& sp, unsigned char shi, unsigned slo, int m = 3, int step = 3) {
 	sp = (shi << 8) | slo;
 	pc += step;
 	//	return m-cycles
@@ -688,14 +688,14 @@ int op_ld_sp_u16(uint16_t& pc, unsigned char memory[], uint16_t& sp, unsigned ch
 
 //	LD (HL+/-) A / LD A (HL+/-)
 //	Load to / from HL and increase or decrese HL after
-int op_ld_hl_a(uint16_t& pc, unsigned char memory[], Registers& registers, int action) {
+int op_ld_hl_a(uint16_t& pc, Registers& registers, int action) {
 #ifdef DEBUG
 	printf("LD A, (HL+) - or similar");
 #endif // DEBUG
 	if((action & HL_ACTION::READ_FROM_HL) == HL_ACTION::READ_FROM_HL)
-		registers.A = memory[(registers.H << 8) | registers.L];
+		registers.A = readFromMem((registers.H << 8) | registers.L);
 	if((action & HL_ACTION::WRITE_TO_HL) == HL_ACTION::WRITE_TO_HL)
-		memory[(registers.H << 8) | registers.L] = registers.A;
+		writeToMem((registers.H << 8) | registers.L, registers.A);
 	uint16_t val = (registers.H << 8) | registers.L;
 	if ((action & HL_ACTION::INCREMENT) == HL_ACTION::INCREMENT) { val++; }
 	if ((action & HL_ACTION::DECREMENT) == HL_ACTION::DECREMENT) { val--; }
@@ -712,7 +712,7 @@ int op_add_hl_u16(uint16_t& pc, Flags& flags, uint16_t val, Registers& registers
 #ifdef DEBUG
 	printf("ADD HL, u16");
 #endif // DEBUG
-	int tar = registers.H << 8 | registers.L;
+	uint16_t tar = (registers.H << 8) | registers.L;
 	flags.N = 0;
 	flags.H = ((((val & 0xfff) + (tar & 0xfff)) & 0x1000) == 0x1000) ? 1 : 0;	//	mask both values up to bit 11, add, mask the (half-carry) Uebertrag, check if set
 	flags.C = ((val + tar) > 0xffff) ? 1 : 0;
@@ -725,14 +725,14 @@ int op_add_hl_u16(uint16_t& pc, Flags& flags, uint16_t val, Registers& registers
 
 //	LD HL, SP + n
 //	loads SP + n into HL
-int op_ld_hl_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers, unsigned char memory[]) {
+int op_ld_hl_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers) {
 #ifdef DEBUG
 	printf("LD HL, SP + n");
 #endif // DEBUG
-	flags.H = ((sp & 0xf) + (memory[pc + 1] & 0xf)) > 0xf;
-	flags.C = ((sp & 0xff) + memory[pc + 1]) > 0xff;
-	registers.H = (sp + ((int8_t)memory[pc + 1])) >> 8;
-	registers.L = (sp + ((int8_t)memory[pc + 1])) & 0xff;
+	flags.H = ((sp & 0xf) + (readFromMem(pc + 1) & 0xf)) > 0xf;
+	flags.C = ((sp & 0xff) + readFromMem(pc + 1)) > 0xff;
+	registers.H = (sp + ((int8_t)readFromMem(pc + 1))) >> 8;
+	registers.L = (sp + ((int8_t)readFromMem(pc + 1))) & 0xff;
 	flags.Z = 0;
 	flags.N = 0;
 	pc += 2;
@@ -742,15 +742,21 @@ int op_ld_hl_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers, 
 
 //	ADD SP, n
 //	adds n to SP
-int op_add_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers, unsigned char memory[]) {
+int op_add_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers) {
 #ifdef DEBUG
 	printf("ADD SP, n");
 #endif // DEBUG
 	flags.Z = 0;
 	flags.N = 0;
-	int8_t offset = (int8_t)memory[pc + 1];
-	flags.H = ((sp & 0xf) + (memory[pc + 1] & 0xf)) > 0xf;
-	flags.C = ((sp & 0xff) + memory[pc + 1]) > 0xff;
+	int8_t offset = (int8_t)readFromMem(pc + 1);
+	if (offset >= 0) {
+		flags.H = ((sp & 0xf) + (offset & 0xf)) > 0xf;
+		flags.C = ((sp & 0xff) + offset) > 0xff;
+	}
+	else {
+		flags.H = (sp & 0xf) < (offset & 0xf);
+		flags.C = (sp & 0xff) < offset;
+	}
 	sp += offset;
 	pc += 2;
 	//	return m-cycles
@@ -758,8 +764,8 @@ int op_add_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers, un
 }
 
 
-int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers& registers, Flags& flags, int& interrupts_enabled) {
-	opcode = memory[pc];
+int processOpcode(uint16_t& pc, uint16_t& sp, Registers& registers, Flags& flags, int& interrupts_enabled) {
+	opcode = readFromMem(pc);
 
 	switch (opcode) {
 
@@ -777,14 +783,14 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0xfb: return op_set_ime(interrupts_enabled, 1, pc); break;
 
 	//	RST
-	case 0xc7: return op_rst(0x00, pc, sp, memory); break;
-	case 0xd7: return op_rst(0x10, pc, sp, memory); break;
-	case 0xe7: return op_rst(0x20, pc, sp, memory); break;
-	case 0xf7: return op_rst(0x30, pc, sp, memory); break;
-	case 0xcf: return op_rst(0x08, pc, sp, memory); break;
-	case 0xdf: return op_rst(0x18, pc, sp, memory); break;
-	case 0xef: return op_rst(0x28, pc, sp, memory); break;
-	case 0xff: return op_rst(0x38, pc, sp, memory); break;
+	case 0xc7: return op_rst(0x00, pc, sp); break;
+	case 0xd7: return op_rst(0x10, pc, sp); break;
+	case 0xe7: return op_rst(0x20, pc, sp); break;
+	case 0xf7: return op_rst(0x30, pc, sp); break;
+	case 0xcf: return op_rst(0x08, pc, sp); break;
+	case 0xdf: return op_rst(0x18, pc, sp); break;
+	case 0xef: return op_rst(0x28, pc, sp); break;
+	case 0xff: return op_rst(0x38, pc, sp); break;
 
 	//////////////////////////////////////////
 	////////	ROT ops
@@ -803,19 +809,19 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	//////////////////////////////////////////
 
 	//	mnemonic:		POP XY
-	case 0xc1: return op_pop(registers.B, registers.C, memory, pc, sp); break;
-	case 0xd1: return op_pop(registers.D, registers.E, memory, pc, sp); break;
-	case 0xe1: return op_pop(registers.H, registers.L, memory, pc, sp); break;
+	case 0xc1: return op_pop(registers.B, registers.C, pc, sp); break;
+	case 0xd1: return op_pop(registers.D, registers.E, pc, sp); break;
+	case 0xe1: return op_pop(registers.H, registers.L, pc, sp); break;
 	case 0xf1:
 		#ifdef DEBUG
 		printf("POP AF");
 		#endif // DEBUG
-		flags.Z = memory[sp] >> 7 & 0x1;
-		flags.N = memory[sp] >> 6 & 0x1;
-		flags.H = memory[sp] >> 5 & 0x1;
-		flags.C = memory[sp] >> 4 & 0x1;
+		flags.Z = readFromMem(sp) >> 7 & 0x1;
+		flags.N = readFromMem(sp) >> 6 & 0x1;
+		flags.H = readFromMem(sp) >> 5 & 0x1;
+		flags.C = readFromMem(sp) >> 4 & 0x1;
 		sp++;
-		registers.A = memory[sp];
+		registers.A = readFromMem(sp);
 		sp++;
 		pc += 1;
 
@@ -824,17 +830,17 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		break;
 
 	//	mnemonic:		PUSH BC
-	case 0xc5: return op_push(registers.B, registers.C, memory, pc, sp); break;
-	case 0xd5: return op_push(registers.D, registers.E, memory, pc, sp); break;
-	case 0xe5: return op_push(registers.H, registers.L, memory, pc, sp); break;
+	case 0xc5: return op_push(registers.B, registers.C, pc, sp); break;
+	case 0xd5: return op_push(registers.D, registers.E, pc, sp); break;
+	case 0xe5: return op_push(registers.H, registers.L, pc, sp); break;
 	case 0xf5:
 		#ifdef DEBUG
 		printf("PUSH AF");
 		#endif // DEBUG
 		sp--;
-		memory[sp] = registers.A;
+		writeToMem(sp, registers.A);
 		sp--;
-		memory[sp] = (flags.Z << 3 | flags.N << 2 | flags.H << 1 | flags.C) << 4 ;	//	push to high nibble
+		writeToMem(sp, (flags.Z << 3 | flags.N << 2 | flags.H << 1 | flags.C) << 4);	//	push to high nibble
 		pc += 1;
 
 		//	return m-cycles
@@ -842,23 +848,23 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		break;
 
 	//	RET / RETI / RET C / RET NC / RET NZ / RET Z
-	case 0xc9: return op_ret(interrupts_enabled, 0, 0, pc, sp, memory, flags.C, 0); break;
-	case 0xd9: return op_ret(interrupts_enabled, 1, 0, pc, sp, memory, flags.C, 0); break;
-	case 0xd8: return op_ret(interrupts_enabled, 0, 1, pc, sp, memory, flags.C, 1); break;
-	case 0xd0: return op_ret(interrupts_enabled, 0, 0, pc, sp, memory, flags.C, 1); break;
-	case 0xc0: return op_ret(interrupts_enabled, 0, 0, pc, sp, memory, flags.Z, 1); break;
-	case 0xc8: return op_ret(interrupts_enabled, 0, 1, pc, sp, memory, flags.Z, 1); break;
+	case 0xc9: return op_ret(interrupts_enabled, 0, 0, pc, sp, flags.C, 0); break;
+	case 0xd9: return op_ret(interrupts_enabled, 1, 0, pc, sp, flags.C, 0); break;
+	case 0xd8: return op_ret(interrupts_enabled, 0, 1, pc, sp, flags.C, 1); break;
+	case 0xd0: return op_ret(interrupts_enabled, 0, 0, pc, sp, flags.C, 1); break;
+	case 0xc0: return op_ret(interrupts_enabled, 0, 0, pc, sp, flags.Z, 1); break;
+	case 0xc8: return op_ret(interrupts_enabled, 0, 1, pc, sp, flags.Z, 1); break;
 
 	//////////////////////////////////////////
 	////////	CALL ops
 	//////////////////////////////////////////
 
 	//	mnemonic:		CALL nn
-	case 0xcd: return op_call(pc, sp, memory, 0, 0, 0); break;
-	case 0xc4: return op_call(pc, sp, memory, 1, flags.Z, 0); break;
-	case 0xcc: return op_call(pc, sp, memory, 1, flags.Z, 1); break;
-	case 0xd4: return op_call(pc, sp, memory, 1, flags.C, 0); break;
-	case 0xdc: return op_call(pc, sp, memory, 1, flags.C, 1); break;
+	case 0xcd: return op_call(pc, sp, 0, 0, 0); break;
+	case 0xc4: return op_call(pc, sp, 1, flags.Z, 0); break;
+	case 0xcc: return op_call(pc, sp, 1, flags.Z, 1); break;
+	case 0xd4: return op_call(pc, sp, 1, flags.C, 0); break;
+	case 0xdc: return op_call(pc, sp, 1, flags.C, 1); break;
 
 	//////////////////////////////////////////
 	////////	INC / DEC ops
@@ -884,9 +890,9 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		#ifdef DEBUG
 		printf("DEC (HL)");
 		#endif // DEBUG
-		flags.H = ((memory[(registers.H << 8) | registers.L] & 0xf) == 0x0) ? 1 : 0;
-		memory[(registers.H << 8) | registers.L] = memory[(registers.H << 8) | registers.L] - 1;
-		flags.Z = (memory[(registers.H << 8) | registers.L] == 0) ? 1 : 0;
+		flags.H = ((readFromMem((registers.H << 8) | registers.L) & 0xf) == 0x0);
+		writeToMem((registers.H << 8) | registers.L, readFromMem((registers.H << 8) | registers.L) - 1);
+		flags.Z = (readFromMem((registers.H << 8) | registers.L) == 0);
 		flags.N = 1;
 		pc += 1;
 		//	return m-cycles
@@ -900,9 +906,9 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 #ifdef DEBUG
 		printf("INC (HL)");
 #endif // DEBUG
-		flags.H = (memory[(registers.H << 8) | registers.L] & 0xf) == 0xf;
-		memory[(registers.H << 8) | registers.L] = memory[(registers.H << 8) | registers.L] + 1;
-		flags.Z = memory[(registers.H << 8) | registers.L] == 0;
+		flags.H = (readFromMem((registers.H << 8) | registers.L) & 0xf) == 0xf;
+		writeToMem((registers.H << 8) | registers.L, readFromMem((registers.H << 8) | registers.L) + 1);
+		flags.Z = readFromMem((registers.H << 8) | registers.L) == 0;
 		flags.N = 0;
 		pc += 1;
 		//	return m-cycles
@@ -940,15 +946,15 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	//////////////////////////////////////////
 
 	//	LD (nn), A
-	case 0xe0: return op_ld_to_adr(0xFF00 + memory[pc + 1], registers.A, memory, pc, 3, 2); break;
-	case 0xea: return op_ld_to_adr((memory[pc + 2] << 8) | memory[pc + 1], registers.A, memory, pc, 4, 3); break;
+	case 0xe0: return op_ld_to_adr(0xFF00 + readFromMem(pc + 1), registers.A, pc, 3, 2); break;
+	case 0xea: return op_ld_to_adr((readFromMem(pc + 2) << 8) | readFromMem(pc + 1), registers.A, pc, 4, 3); break;
 
 	//	LD A, (XY)
-	case 0x0a: return op_ld(registers.A, memory[(registers.B << 8) | registers.C], flags, registers, pc, 2); break;
-	case 0x1a: return op_ld(registers.A, memory[(registers.D << 8) | registers.E], flags, registers, pc, 2); break;
-	case 0xf0: return op_ld(registers.A, memory[0xff00 + memory[pc + 1]], flags, registers, pc, 3, 2); break;
-	case 0xf2: return op_ld(registers.A, memory[0xff00 + registers.C], flags, registers, pc, 2); break;
-	case 0xfa: return op_ld(registers.A, memory[memory[pc + 2] << 8 | memory[pc + 1]], flags, registers, pc, 4, 3); break;
+	case 0x0a: return op_ld(registers.A, readFromMem((registers.B << 8) | registers.C), flags, registers, pc, 2); break;
+	case 0x1a: return op_ld(registers.A, readFromMem((registers.D << 8) | registers.E), flags, registers, pc, 2); break;
+	case 0xf0: return op_ld(registers.A, readFromMem(0xff00 + readFromMem(pc + 1)), flags, registers, pc, 3, 2); break;
+	case 0xf2: return op_ld(registers.A, readFromMem(0xff00 + registers.C), flags, registers, pc, 2); break;
+	case 0xfa: return op_ld(registers.A, readFromMem(readFromMem(pc + 2) << 8 | readFromMem(pc + 1)), flags, registers, pc, 4, 3); break;
 
 	//	LD A
 	case 0x7f: return op_ld(registers.A, registers.A, flags, registers, pc); break;
@@ -958,8 +964,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x7b: return op_ld(registers.A, registers.E, flags, registers, pc); break;
 	case 0x7c: return op_ld(registers.A, registers.H, flags, registers, pc); break;
 	case 0x7d: return op_ld(registers.A, registers.L, flags, registers, pc); break;
-	case 0x7e: return op_ld(registers.A, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x3e: return op_ld(registers.A, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x7e: return op_ld(registers.A, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x3e: return op_ld(registers.A, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD B
 	case 0x47: return op_ld(registers.B, registers.A, flags, registers, pc); break;
@@ -969,8 +975,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x43: return op_ld(registers.B, registers.E, flags, registers, pc); break;
 	case 0x44: return op_ld(registers.B, registers.H, flags, registers, pc); break;
 	case 0x45: return op_ld(registers.B, registers.L, flags, registers, pc); break;
-	case 0x46: return op_ld(registers.B, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x06: return op_ld(registers.B, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x46: return op_ld(registers.B, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x06: return op_ld(registers.B, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD C
 	case 0x4f: return op_ld(registers.C, registers.A, flags, registers, pc); break;
@@ -980,8 +986,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x4b: return op_ld(registers.C, registers.E, flags, registers, pc); break;
 	case 0x4c: return op_ld(registers.C, registers.H, flags, registers, pc); break;
 	case 0x4d: return op_ld(registers.C, registers.L, flags, registers, pc); break;
-	case 0x4e: return op_ld(registers.C, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x0e: return op_ld(registers.C, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x4e: return op_ld(registers.C, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x0e: return op_ld(registers.C, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD D
 	case 0x57: return op_ld(registers.D, registers.A, flags, registers, pc); break;
@@ -991,8 +997,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x53: return op_ld(registers.D, registers.E, flags, registers, pc); break;
 	case 0x54: return op_ld(registers.D, registers.H, flags, registers, pc); break;
 	case 0x55: return op_ld(registers.D, registers.L, flags, registers, pc); break;
-	case 0x56: return op_ld(registers.D, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x16: return op_ld(registers.D, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x56: return op_ld(registers.D, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x16: return op_ld(registers.D, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD E
 	case 0x5f: return op_ld(registers.E, registers.A, flags, registers, pc); break;
@@ -1002,8 +1008,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x5b: return op_ld(registers.E, registers.E, flags, registers, pc); break;
 	case 0x5c: return op_ld(registers.E, registers.H, flags, registers, pc); break;
 	case 0x5d: return op_ld(registers.E, registers.L, flags, registers, pc); break;
-	case 0x5e: return op_ld(registers.E, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x1e: return op_ld(registers.E, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x5e: return op_ld(registers.E, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x1e: return op_ld(registers.E, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD H
 	case 0x67: return op_ld(registers.H, registers.A, flags, registers, pc); break;
@@ -1013,8 +1019,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x63: return op_ld(registers.H, registers.E, flags, registers, pc); break;
 	case 0x64: return op_ld(registers.H, registers.H, flags, registers, pc); break;
 	case 0x65: return op_ld(registers.H, registers.L, flags, registers, pc); break;
-	case 0x66: return op_ld(registers.H, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x26: return op_ld(registers.H, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x66: return op_ld(registers.H, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x26: return op_ld(registers.H, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD L
 	case 0x6f: return op_ld(registers.L, registers.A, flags, registers, pc); break;
@@ -1024,39 +1030,39 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x6b: return op_ld(registers.L, registers.E, flags, registers, pc); break;
 	case 0x6c: return op_ld(registers.L, registers.H, flags, registers, pc); break;
 	case 0x6d: return op_ld(registers.L, registers.L, flags, registers, pc); break;
-	case 0x6e: return op_ld(registers.L, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0x2e: return op_ld(registers.L, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x6e: return op_ld(registers.L, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0x2e: return op_ld(registers.L, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	LD (XY), Z
-	case 0x70: return op_ld_to_adr((registers.H << 8) | registers.L, registers.B, memory, pc); break;
-	case 0x71: return op_ld_to_adr((registers.H << 8) | registers.L, registers.C, memory, pc); break;
-	case 0x72: return op_ld_to_adr((registers.H << 8) | registers.L, registers.D, memory, pc); break;
-	case 0x73: return op_ld_to_adr((registers.H << 8) | registers.L, registers.E, memory, pc); break;
-	case 0x74: return op_ld_to_adr((registers.H << 8) | registers.L, registers.H, memory, pc); break;
-	case 0x75: return op_ld_to_adr((registers.H << 8) | registers.L, registers.L, memory, pc); break;
-	case 0x77: return op_ld_to_adr((registers.H << 8) | registers.L, registers.A, memory, pc); break;
-	case 0xe2: return op_ld_to_adr(0xff00 + registers.C, registers.A, memory, pc); break;
-	case 0x36: return op_ld_to_adr((registers.H << 8) | registers.L, memory[pc + 1], memory, pc, 3, 2); break;
+	case 0x70: return op_ld_to_adr((registers.H << 8) | registers.L, registers.B, pc); break;
+	case 0x71: return op_ld_to_adr((registers.H << 8) | registers.L, registers.C, pc); break;
+	case 0x72: return op_ld_to_adr((registers.H << 8) | registers.L, registers.D, pc); break;
+	case 0x73: return op_ld_to_adr((registers.H << 8) | registers.L, registers.E, pc); break;
+	case 0x74: return op_ld_to_adr((registers.H << 8) | registers.L, registers.H, pc); break;
+	case 0x75: return op_ld_to_adr((registers.H << 8) | registers.L, registers.L, pc); break;
+	case 0x77: return op_ld_to_adr((registers.H << 8) | registers.L, registers.A, pc); break;
+	case 0xe2: return op_ld_to_adr(0xff00 + registers.C, registers.A, pc); break;
+	case 0x36: return op_ld_to_adr((registers.H << 8) | registers.L, readFromMem(pc + 1), pc, 3, 2); break;
 
 	//	LD RR, nn
-	case 0x01: return op_ld_rr_u16(pc, memory, registers.B, registers.C, memory[pc + 2], memory[pc + 1]); break;
-	case 0x11: return op_ld_rr_u16(pc, memory, registers.D, registers.E, memory[pc + 2], memory[pc + 1]); break;
-	case 0x21: return op_ld_rr_u16(pc, memory, registers.H, registers.L, memory[pc + 2], memory[pc + 1]); break;
-	case 0x31: return op_ld_sp_u16(pc, memory, sp, memory[pc + 2], memory[pc + 1]); break;
-	case 0xf9: return op_ld_sp_u16(pc, memory, sp, registers.H, registers.L, 2, 1);
+	case 0x01: return op_ld_rr_u16(pc, registers.B, registers.C, readFromMem(pc + 2), readFromMem(pc + 1)); break;
+	case 0x11: return op_ld_rr_u16(pc, registers.D, registers.E, readFromMem(pc + 2), readFromMem(pc + 1)); break;
+	case 0x21: return op_ld_rr_u16(pc, registers.H, registers.L, readFromMem(pc + 2), readFromMem(pc + 1)); break;
+	case 0x31: return op_ld_sp_u16(pc, sp, readFromMem(pc + 2), readFromMem(pc + 1)); break;
+	case 0xf9: return op_ld_sp_u16(pc, sp, registers.H, registers.L, 2, 1);
 
 	//	LD (XX), A
-	case 0x02: return op_ld_to_adr((registers.B << 8) | registers.C, registers.A, memory, pc, 2, 1); break;
-	case 0x12: return op_ld_to_adr((registers.D << 8) | registers.E, registers.A, memory, pc, 2, 1); break;
+	case 0x02: return op_ld_to_adr((registers.B << 8) | registers.C, registers.A, pc, 2, 1); break;
+	case 0x12: return op_ld_to_adr((registers.D << 8) | registers.E, registers.A, pc, 2, 1); break;
 
 	//	LD HL, SP + n 
-	case 0xf8: return op_ld_hl_sp(pc, sp, flags, registers, memory); break;
+	case 0xf8: return op_ld_hl_sp(pc, sp, flags, registers); break;
 
 	//	LD A, (HL+ / -) / LD (HL + / -) A
-	case 0x2a: return op_ld_hl_a(pc, memory, registers, HL_ACTION::READ_FROM_HL | HL_ACTION::INCREMENT); break;
-	case 0x3a: return op_ld_hl_a(pc, memory, registers, HL_ACTION::READ_FROM_HL | HL_ACTION::DECREMENT); break;
-	case 0x32: return op_ld_hl_a(pc, memory, registers, HL_ACTION::WRITE_TO_HL | HL_ACTION::DECREMENT); break;
-	case 0x22: return op_ld_hl_a(pc, memory, registers, HL_ACTION::WRITE_TO_HL | HL_ACTION::INCREMENT); break;
+	case 0x2a: return op_ld_hl_a(pc, registers, HL_ACTION::READ_FROM_HL | HL_ACTION::INCREMENT); break;
+	case 0x3a: return op_ld_hl_a(pc, registers, HL_ACTION::READ_FROM_HL | HL_ACTION::DECREMENT); break;
+	case 0x32: return op_ld_hl_a(pc, registers, HL_ACTION::WRITE_TO_HL | HL_ACTION::DECREMENT); break;
+	case 0x22: return op_ld_hl_a(pc, registers, HL_ACTION::WRITE_TO_HL | HL_ACTION::INCREMENT); break;
 
 	//	mnemonic:		LD (nn), SP
 	case 0x08:
@@ -1064,8 +1070,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		#ifdef DEBUG
 		printf("LD (nn)[0x%04x], SP", ((memory[pc + 2] << 8) | memory[pc + 1]));
 		#endif // DEBUG
-		memory[((memory[pc + 2] << 8) | memory[pc + 1])] = sp;
-		memory[((memory[pc + 2] << 8) | memory[pc + 1]) + 1] = sp >> 8;
+		writeToMem(((readFromMem(pc + 2) << 8) | readFromMem(pc + 1)), sp & 0xff);
+		writeToMem(((readFromMem(pc + 2) << 8) | readFromMem(pc + 1)) + 1, sp >> 8);
 		pc += 3;
 		return 5;
 		break;
@@ -1096,8 +1102,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0xbb: return op_cp(registers.A, registers.E, flags, registers, pc); break;
 	case 0xbc: return op_cp(registers.A, registers.H, flags, registers, pc); break;
 	case 0xbd: return op_cp(registers.A, registers.L, flags, registers, pc); break;
-	case 0xbe: return op_cp(registers.A, memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xfe: return op_cp(registers.A, memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0xbe: return op_cp(registers.A, readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xfe: return op_cp(registers.A, readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	mnemonic:		XOR
 	case 0xaf: return op_xor(registers.A, flags, registers, pc); break;
@@ -1107,8 +1113,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0xab: return op_xor(registers.E, flags, registers, pc); break;
 	case 0xac: return op_xor(registers.H, flags, registers, pc); break;
 	case 0xad: return op_xor(registers.L, flags, registers, pc); break;
-	case 0xae: return op_xor(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xee: return op_xor(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0xae: return op_xor(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xee: return op_xor(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	mnemonic:		OR B
 	case 0xb0: return op_or(registers.B, flags, registers, pc); break;
@@ -1117,9 +1123,9 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0xb3: return op_or(registers.E, flags, registers, pc); break;
 	case 0xb4: return op_or(registers.H, flags, registers, pc); break;
 	case 0xb5: return op_or(registers.L, flags, registers, pc); break;
-	case 0xb6: return op_or(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
+	case 0xb6: return op_or(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
 	case 0xb7: return op_or(registers.A, flags, registers, pc); break;
-	case 0xf6: return op_or(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0xf6: return op_or(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	mnemonic:		AND X
 	case 0xa7: return op_and(registers.A, flags, registers, pc); break;
@@ -1129,8 +1135,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0xa3: return op_and(registers.E, flags, registers, pc); break;
 	case 0xa4: return op_and(registers.H, flags, registers, pc); break;
 	case 0xa5: return op_and(registers.L, flags, registers, pc); break;
-	case 0xa6: return op_and(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xe6: return op_and(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0xa6: return op_and(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xe6: return op_and(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	////////	ADD, SUB instructions
 
@@ -1142,8 +1148,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x83: return op_add(registers.E, flags, registers, pc); break;
 	case 0x84: return op_add(registers.H, flags, registers, pc); break;
 	case 0x85: return op_add(registers.L, flags, registers, pc); break;
-	case 0x86: return op_add(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xc6: return op_add(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x86: return op_add(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xc6: return op_add(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	mnemonic:		ADD HL, BC
 	//	length:			1
@@ -1174,7 +1180,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	}*/
 
 	//	mnemonic:		ADD SP, n
-	case 0xe8: return op_add_sp(pc, sp, flags, registers, memory); break;
+	case 0xe8: return op_add_sp(pc, sp, flags, registers); break;
 
 	//	mnemonic:		ADC A
 	case 0x8f: return op_adc(registers.A, flags, registers, pc); break;
@@ -1184,8 +1190,8 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x8b: return op_adc(registers.E, flags, registers, pc); break;
 	case 0x8c: return op_adc(registers.H, flags, registers, pc); break;
 	case 0x8d: return op_adc(registers.L, flags, registers, pc); break;
-	case 0x8e: return op_adc(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xce: return op_adc(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0x8e: return op_adc(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xce: return op_adc(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	SUB X
 	case 0x90: return op_sub(registers.B, flags, registers, pc); break;
@@ -1194,9 +1200,9 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x93: return op_sub(registers.E, flags, registers, pc); break;
 	case 0x94: return op_sub(registers.H, flags, registers, pc); break;
 	case 0x95: return op_sub(registers.L, flags, registers, pc); break;
-	case 0x96: return op_sub(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
+	case 0x96: return op_sub(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
 	case 0x97: return op_sub(registers.A, flags, registers, pc); break;
-	case 0xd6: return op_sub(memory[pc + 1], flags, registers, pc, 2, 2); break;
+	case 0xd6: return op_sub(readFromMem(pc + 1), flags, registers, pc, 2, 2); break;
 
 	//	SBC X
 	case 0x98: return op_sbc(registers.B, flags, registers, pc); break;
@@ -1206,18 +1212,18 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 	case 0x9c: return op_sbc(registers.H, flags, registers, pc); break;
 	case 0x9d: return op_sbc(registers.L, flags, registers, pc); break;
 	case 0x9f: return op_sbc(registers.A, flags, registers, pc); break;
-	case 0x9e: return op_sbc(memory[(registers.H << 8) | registers.L], flags, registers, pc, 2); break;
-	case 0xde: return op_sbc_u8(memory[pc + 1], flags, registers, pc); break;
+	case 0x9e: return op_sbc(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 2); break;
+	case 0xde: return op_sbc_u8(readFromMem(pc + 1), flags, registers, pc); break;
 
 
 	////////	JMP instructions
 
 	//	JP nn
-	case 0xc3: return op_jp(pc, ((memory[pc + 2] << 8) | (memory[pc + 1] & 0xff)), 0, 0, 0); break;
-	case 0xca: return op_jp(pc, ((memory[pc + 2] << 8) | (memory[pc + 1] & 0xff)), 1, flags.Z, 1); break;
-	case 0xc2: return op_jp(pc, ((memory[pc + 2] << 8) | (memory[pc + 1] & 0xff)), 1, flags.Z, 0); break;
-	case 0xd2: return op_jp(pc, ((memory[pc + 2] << 8) | (memory[pc + 1] & 0xff)), 1, flags.C, 0); break;
-	case 0xda: return op_jp(pc, ((memory[pc + 2] << 8) | (memory[pc + 1] & 0xff)), 1, flags.C, 1); break;
+	case 0xc3: return op_jp(pc, ((readFromMem(pc + 2) << 8) | (readFromMem(pc + 1) & 0xff)), 0, 0, 0); break;
+	case 0xca: return op_jp(pc, ((readFromMem(pc + 2) << 8) | (readFromMem(pc + 1) & 0xff)), 1, flags.Z, 1); break;
+	case 0xc2: return op_jp(pc, ((readFromMem(pc + 2) << 8) | (readFromMem(pc + 1) & 0xff)), 1, flags.Z, 0); break;
+	case 0xd2: return op_jp(pc, ((readFromMem(pc + 2) << 8) | (readFromMem(pc + 1) & 0xff)), 1, flags.C, 0); break;
+	case 0xda: return op_jp(pc, ((readFromMem(pc + 2) << 8) | (readFromMem(pc + 1) & 0xff)), 1, flags.C, 1); break;
 	case 0xe9: 
 		pc =(registers.H << 8) | registers.L;
 		//	return m-cycles
@@ -1225,17 +1231,17 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		break;
 
 	//	JR r
-	case 0x18: return op_jr(pc, (int8_t)memory[pc + 1], 0, 0, 0); break;
-	case 0x20: return op_jr(pc, (int8_t)memory[pc + 1], 1, flags.Z, 0); break;
-	case 0x30: return op_jr(pc, (int8_t)memory[pc + 1], 1, flags.C, 0); break;
-	case 0x38: return op_jr(pc, (int8_t)memory[pc + 1], 1, flags.C, 1); break;
-	case 0x28: return op_jr(pc, (int8_t)memory[pc + 1], 1, flags.Z, 1); break;
+	case 0x18: return op_jr(pc, (int8_t)readFromMem(pc + 1), 0, 0, 0); break;
+	case 0x20: return op_jr(pc, (int8_t)readFromMem(pc + 1), 1, flags.Z, 0); break;
+	case 0x30: return op_jr(pc, (int8_t)readFromMem(pc + 1), 1, flags.C, 0); break;
+	case 0x38: return op_jr(pc, (int8_t)readFromMem(pc + 1), 1, flags.C, 1); break;
+	case 0x28: return op_jr(pc, (int8_t)readFromMem(pc + 1), 1, flags.Z, 1); break;
 
 	//
 	//	From here on CB-Prefix OpCodes
 	//
 	case 0xcb:
-		switch (memory[pc + 1])
+		switch (readFromMem(pc + 1))
 		{
 
 		//	RLC - L2 - T8 - Z00C
@@ -1246,7 +1252,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x03: return op_rlc(registers.E, flags, registers, pc); break;
 		case 0x04: return op_rlc(registers.H, flags, registers, pc); break;
 		case 0x05: return op_rlc(registers.L, flags, registers, pc); break;
-		case 0x06: return op_rlc(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x06: return op_rlc(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x07: return op_rlc(registers.A, flags, registers, pc); break;
 
 		//	RRC - L2 - T8 - Z00C
@@ -1257,7 +1263,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x0b: return op_rrc(registers.E, flags, registers, pc); break;
 		case 0x0c: return op_rrc(registers.H, flags, registers, pc); break;
 		case 0x0d: return op_rrc(registers.L, flags, registers, pc); break;
-		case 0x0e: return op_rrc(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x0e: return op_rrc(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x0f: return op_rrc(registers.A, flags, registers, pc); break;
 
 		//	RL - L2 - T8 - Z00C
@@ -1268,7 +1274,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x13: return op_rl(registers.E, flags, registers, pc); break;
 		case 0x14: return op_rl(registers.H, flags, registers, pc); break;
 		case 0x15: return op_rl(registers.L, flags, registers, pc); break;
-		case 0x16: return op_rl(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x16: return op_rl(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x17: return op_rl(registers.A, flags, registers, pc); break;
 
 		//	RR - L2 - T8 - Z00C
@@ -1279,7 +1285,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x1b: return op_rr(registers.E, flags, registers, pc); break;
 		case 0x1c: return op_rr(registers.H, flags, registers, pc); break;
 		case 0x1d: return op_rr(registers.L, flags, registers, pc); break;
-		case 0x1e: return op_rr(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x1e: return op_rr(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x1f: return op_rr(registers.A, flags, registers, pc); break;
 
 		//	SLA - L2 - T8 - Z00C
@@ -1290,7 +1296,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x23: return op_sla(registers.E, flags, registers, pc); break;
 		case 0x24: return op_sla(registers.H, flags, registers, pc); break;
 		case 0x25: return op_sla(registers.L, flags, registers, pc); break;
-		case 0x26: return op_sla(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x26: return op_sla(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x27: return op_sla(registers.A, flags, registers, pc); break;
 
 		//	SRA - L2 - T8 - Z00C
@@ -1301,7 +1307,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x2b: return op_sra(registers.E, flags, registers, pc); break;
 		case 0x2c: return op_sra(registers.H, flags, registers, pc); break;
 		case 0x2d: return op_sra(registers.L, flags, registers, pc); break;
-		case 0x2e: return op_sra(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x2e: return op_sra(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x2f: return op_sra(registers.A, flags, registers, pc); break;
 
 		//	SWAP - L2 - T8 - Z000
@@ -1312,7 +1318,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x33: return op_swap(registers.E, flags, registers, pc); break;
 		case 0x34: return op_swap(registers.H, flags, registers, pc); break;
 		case 0x35: return op_swap(registers.L, flags, registers, pc); break;
-		case 0x36: return op_swap(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x36: return op_swap(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x37: return op_swap(registers.A, flags, registers, pc); break;
 
 		//	SRL - L2 - T8 - Z00C
@@ -1323,7 +1329,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x3b: return op_srl(registers.E, flags, registers, pc); break;
 		case 0x3c: return op_srl(registers.H, flags, registers, pc); break;
 		case 0x3d: return op_srl(registers.L, flags, registers, pc); break;
-		case 0x3e: return op_srl(memory[(registers.H << 8) | registers.L], flags, registers, pc, 4); break;
+		case 0x3e: return op_srl(readFromMem((registers.H << 8) | registers.L), flags, registers, pc, 4); break;
 		case 0x3f: return op_srl(registers.A, flags, registers, pc); break;
 
 		//	BIT - L2 - T8 - Z01/
@@ -1334,7 +1340,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x43: return op_bit(registers.E, 0, flags, registers, pc); break;
 		case 0x44: return op_bit(registers.H, 0, flags, registers, pc); break;
 		case 0x45: return op_bit(registers.L, 0, flags, registers, pc); break;
-		case 0x46: return op_bit(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 3); break;
+		case 0x46: return op_bit(readFromMem((registers.H << 8) | registers.L), 0, flags, registers, pc, 3); break;
 		case 0x47: return op_bit(registers.A, 0, flags, registers, pc); break;
 		case 0x48: return op_bit(registers.B, 1, flags, registers, pc); break;
 		case 0x49: return op_bit(registers.C, 1, flags, registers, pc); break;
@@ -1342,7 +1348,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x4b: return op_bit(registers.E, 1, flags, registers, pc); break;
 		case 0x4c: return op_bit(registers.H, 1, flags, registers, pc); break;
 		case 0x4d: return op_bit(registers.L, 1, flags, registers, pc); break;
-		case 0x4e: return op_bit(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 3); break;
+		case 0x4e: return op_bit(readFromMem((registers.H << 8) | registers.L), 1, flags, registers, pc, 3); break;
 		case 0x4f: return op_bit(registers.A, 1, flags, registers, pc); break;
 		case 0x50: return op_bit(registers.B, 2, flags, registers, pc); break;
 		case 0x51: return op_bit(registers.C, 2, flags, registers, pc); break;
@@ -1350,7 +1356,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x53: return op_bit(registers.E, 2, flags, registers, pc); break;
 		case 0x54: return op_bit(registers.H, 2, flags, registers, pc); break;
 		case 0x55: return op_bit(registers.L, 2, flags, registers, pc); break;
-		case 0x56: return op_bit(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 3); break;
+		case 0x56: return op_bit(readFromMem((registers.H << 8) | registers.L), 2, flags, registers, pc, 3); break;
 		case 0x57: return op_bit(registers.A, 2, flags, registers, pc); break;
 		case 0x58: return op_bit(registers.B, 3, flags, registers, pc); break;
 		case 0x59: return op_bit(registers.C, 3, flags, registers, pc); break;
@@ -1358,7 +1364,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x5b: return op_bit(registers.E, 3, flags, registers, pc); break;
 		case 0x5c: return op_bit(registers.H, 3, flags, registers, pc); break;
 		case 0x5d: return op_bit(registers.L, 3, flags, registers, pc); break;
-		case 0x5e: return op_bit(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 3); break;
+		case 0x5e: return op_bit(readFromMem((registers.H << 8) | registers.L), 3, flags, registers, pc, 3); break;
 		case 0x5f: return op_bit(registers.A, 3, flags, registers, pc); break;
 		case 0x60: return op_bit(registers.B, 4, flags, registers, pc); break;
 		case 0x61: return op_bit(registers.C, 4, flags, registers, pc); break;
@@ -1366,7 +1372,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x63: return op_bit(registers.E, 4, flags, registers, pc); break;
 		case 0x64: return op_bit(registers.H, 4, flags, registers, pc); break;
 		case 0x65: return op_bit(registers.L, 4, flags, registers, pc); break;
-		case 0x66: return op_bit(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 3); break;
+		case 0x66: return op_bit(readFromMem((registers.H << 8) | registers.L), 4, flags, registers, pc, 3); break;
 		case 0x67: return op_bit(registers.A, 4, flags, registers, pc); break;
 		case 0x68: return op_bit(registers.B, 5, flags, registers, pc); break;
 		case 0x69: return op_bit(registers.C, 5, flags, registers, pc); break;
@@ -1374,7 +1380,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x6b: return op_bit(registers.E, 5, flags, registers, pc); break;
 		case 0x6c: return op_bit(registers.H, 5, flags, registers, pc); break;
 		case 0x6d: return op_bit(registers.L, 5, flags, registers, pc); break;
-		case 0x6e: return op_bit(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 3); break;
+		case 0x6e: return op_bit(readFromMem((registers.H << 8) | registers.L), 5, flags, registers, pc, 3); break;
 		case 0x6f: return op_bit(registers.A, 5, flags, registers, pc); break;
 		case 0x70: return op_bit(registers.B, 6, flags, registers, pc); break;
 		case 0x71: return op_bit(registers.C, 6, flags, registers, pc); break;
@@ -1382,7 +1388,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x73: return op_bit(registers.E, 6, flags, registers, pc); break;
 		case 0x74: return op_bit(registers.H, 6, flags, registers, pc); break;
 		case 0x75: return op_bit(registers.L, 6, flags, registers, pc); break;
-		case 0x76: return op_bit(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 3); break;
+		case 0x76: return op_bit(readFromMem((registers.H << 8) | registers.L), 6, flags, registers, pc, 3); break;
 		case 0x77: return op_bit(registers.A, 6, flags, registers, pc); break;
 		case 0x78: return op_bit(registers.B, 7, flags, registers, pc); break;
 		case 0x79: return op_bit(registers.C, 7, flags, registers, pc); break;
@@ -1390,7 +1396,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x7b: return op_bit(registers.E, 7, flags, registers, pc); break;
 		case 0x7c: return op_bit(registers.H, 7, flags, registers, pc); break;
 		case 0x7d: return op_bit(registers.L, 7, flags, registers, pc); break;
-		case 0x7e: return op_bit(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 3); break;
+		case 0x7e: return op_bit(readFromMem((registers.H << 8) | registers.L), 7, flags, registers, pc, 3); break;
 		case 0x7f: return op_bit(registers.A, 7, flags, registers, pc); break;
 
 		//	RES - L2 - T8 - ////
@@ -1401,7 +1407,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x83: return op_res(registers.E, 0, flags, registers, pc); break;
 		case 0x84: return op_res(registers.H, 0, flags, registers, pc); break;
 		case 0x85: return op_res(registers.L, 0, flags, registers, pc); break;
-		case 0x86: return op_res(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 4); break;
+		case 0x86: return op_res(readFromMem((registers.H << 8) | registers.L), 0, flags, registers, pc, 4); break;
 		case 0x87: return op_res(registers.A, 0, flags, registers, pc); break;
 		case 0x88: return op_res(registers.B, 1, flags, registers, pc); break;
 		case 0x89: return op_res(registers.C, 1, flags, registers, pc); break;
@@ -1409,7 +1415,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x8b: return op_res(registers.E, 1, flags, registers, pc); break;
 		case 0x8c: return op_res(registers.H, 1, flags, registers, pc); break;
 		case 0x8d: return op_res(registers.L, 1, flags, registers, pc); break;
-		case 0x8e: return op_res(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 4); break;
+		case 0x8e: return op_res(readFromMem((registers.H << 8) | registers.L), 1, flags, registers, pc, 4); break;
 		case 0x8f: return op_res(registers.A, 1, flags, registers, pc); break;
 		case 0x90: return op_res(registers.B, 2, flags, registers, pc); break;
 		case 0x91: return op_res(registers.C, 2, flags, registers, pc); break;
@@ -1417,7 +1423,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x93: return op_res(registers.E, 2, flags, registers, pc); break;
 		case 0x94: return op_res(registers.H, 2, flags, registers, pc); break;
 		case 0x95: return op_res(registers.L, 2, flags, registers, pc); break;
-		case 0x96: return op_res(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 4); break;
+		case 0x96: return op_res(readFromMem((registers.H << 8) | registers.L), 2, flags, registers, pc, 4); break;
 		case 0x97: return op_res(registers.A, 2, flags, registers, pc); break;
 		case 0x98: return op_res(registers.B, 3, flags, registers, pc); break;
 		case 0x99: return op_res(registers.C, 3, flags, registers, pc); break;
@@ -1425,7 +1431,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0x9b: return op_res(registers.E, 3, flags, registers, pc); break;
 		case 0x9c: return op_res(registers.H, 3, flags, registers, pc); break;
 		case 0x9d: return op_res(registers.L, 3, flags, registers, pc); break;
-		case 0x9e: return op_res(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 4); break;
+		case 0x9e: return op_res(readFromMem((registers.H << 8) | registers.L), 3, flags, registers, pc, 4); break;
 		case 0x9f: return op_res(registers.A, 3, flags, registers, pc); break;
 		case 0xa0: return op_res(registers.B, 4, flags, registers, pc); break;
 		case 0xa1: return op_res(registers.C, 4, flags, registers, pc); break;
@@ -1433,7 +1439,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0xa3: return op_res(registers.E, 4, flags, registers, pc); break;
 		case 0xa4: return op_res(registers.H, 4, flags, registers, pc); break;
 		case 0xa5: return op_res(registers.L, 4, flags, registers, pc); break;
-		case 0xa6: return op_res(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 4); break;
+		case 0xa6: return op_res(readFromMem((registers.H << 8) | registers.L), 4, flags, registers, pc, 4); break;
 		case 0xa7: return op_res(registers.A, 4, flags, registers, pc); break;
 		case 0xa8: return op_res(registers.B, 5, flags, registers, pc); break;
 		case 0xa9: return op_res(registers.C, 5, flags, registers, pc); break;
@@ -1441,7 +1447,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0xab: return op_res(registers.E, 5, flags, registers, pc); break;
 		case 0xac: return op_res(registers.H, 5, flags, registers, pc); break;
 		case 0xad: return op_res(registers.L, 5, flags, registers, pc); break;
-		case 0xae: return op_res(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 4); break;
+		case 0xae: return op_res(readFromMem((registers.H << 8) | registers.L), 5, flags, registers, pc, 4); break;
 		case 0xaf: return op_res(registers.A, 5, flags, registers, pc); break;
 		case 0xb0: return op_res(registers.B, 6, flags, registers, pc); break;
 		case 0xb1: return op_res(registers.C, 6, flags, registers, pc); break;
@@ -1449,7 +1455,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0xb3: return op_res(registers.E, 6, flags, registers, pc); break;
 		case 0xb4: return op_res(registers.H, 6, flags, registers, pc); break;
 		case 0xb5: return op_res(registers.L, 6, flags, registers, pc); break;
-		case 0xb6: return op_res(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 4); break;
+		case 0xb6: return op_res(readFromMem((registers.H << 8) | registers.L), 6, flags, registers, pc, 4); break;
 		case 0xb7: return op_res(registers.A, 6, flags, registers, pc); break;
 		case 0xb8: return op_res(registers.B, 7, flags, registers, pc); break;
 		case 0xb9: return op_res(registers.C, 7, flags, registers, pc); break;
@@ -1457,7 +1463,7 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0xbb: return op_res(registers.E, 7, flags, registers, pc); break;
 		case 0xbc: return op_res(registers.H, 7, flags, registers, pc); break;
 		case 0xbd: return op_res(registers.L, 7, flags, registers, pc); break;
-		case 0xbe: return op_res(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 4); break;
+		case 0xbe: return op_res(readFromMem((registers.H << 8) | registers.L), 7, flags, registers, pc, 4); break;
 		case 0xbf: return op_res(registers.A, 7, flags, registers, pc); break;
 
 		//	SET - L2 - T8 - ////
@@ -1520,17 +1526,17 @@ int processOpcode(uint16_t& pc, uint16_t& sp, unsigned char memory[], Registers&
 		case 0xff: return op_set(registers.A, 7, flags, registers, pc); break;
 
 		//	SET nr, (HL) - L2 - T16 - ////
-		case 0xc6: return op_set(memory[(registers.H << 8) | registers.L], 0, flags, registers, pc, 4); break;
-		case 0xce: return op_set(memory[(registers.H << 8) | registers.L], 1, flags, registers, pc, 4); break;
-		case 0xd6: return op_set(memory[(registers.H << 8) | registers.L], 2, flags, registers, pc, 4); break;
-		case 0xde: return op_set(memory[(registers.H << 8) | registers.L], 3, flags, registers, pc, 4); break;
-		case 0xe6: return op_set(memory[(registers.H << 8) | registers.L], 4, flags, registers, pc, 4); break;
-		case 0xee: return op_set(memory[(registers.H << 8) | registers.L], 5, flags, registers, pc, 4); break;
-		case 0xf6: return op_set(memory[(registers.H << 8) | registers.L], 6, flags, registers, pc, 4); break;
-		case 0xfe: return op_set(memory[(registers.H << 8) | registers.L], 7, flags, registers, pc, 4); break;
+		case 0xc6: return op_set(readFromMem((registers.H << 8) | registers.L), 0, flags, registers, pc, 4); break;
+		case 0xce: return op_set(readFromMem((registers.H << 8) | registers.L), 1, flags, registers, pc, 4); break;
+		case 0xd6: return op_set(readFromMem((registers.H << 8) | registers.L), 2, flags, registers, pc, 4); break;
+		case 0xde: return op_set(readFromMem((registers.H << 8) | registers.L), 3, flags, registers, pc, 4); break;
+		case 0xe6: return op_set(readFromMem((registers.H << 8) | registers.L), 4, flags, registers, pc, 4); break;
+		case 0xee: return op_set(readFromMem((registers.H << 8) | registers.L), 5, flags, registers, pc, 4); break;
+		case 0xf6: return op_set(readFromMem((registers.H << 8) | registers.L), 6, flags, registers, pc, 4); break;
+		case 0xfe: return op_set(readFromMem((registers.H << 8) | registers.L), 7, flags, registers, pc, 4); break;
 
 		default:
-			printf("Unsupported CB-prefixed opcode: 0x%02x at 0x%04x\n\n\n", memory[pc + 1], pc);
+			printf("Unsupported CB-prefixed opcode: 0x%02x at 0x%04x\n\n\n", readFromMem(pc + 1), pc);
 			std::exit(EXIT_FAILURE);
 			break;
 		}

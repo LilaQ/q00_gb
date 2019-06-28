@@ -1,6 +1,7 @@
 ﻿#define _CRT_SECURE_NO_DEPRECATE
 #include "SDL2/include/SDL.h"
 #include <iostream>
+#include "mmu.h"
 #ifdef _WIN32
 	#include <Windows.h>
 	#include <WinUser.h>
@@ -45,22 +46,22 @@ SDL_Window* getWindow() {
 	return window;
 }
 
-void createBGMap(unsigned char memory[]) {
-	tilemap = (((memory[0xff40] >> 3) & 1) == 1) ? 0x9c00 : 0x9800;		//	check which location was set in LCDC for BG Map
-	tiledata = (((memory[0xff40] >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
+void createBGMap() {
+	bgmap[FB_SIZE];
+	tilemap = (((readFromMem(0xff40) >> 3) & 1) == 1) ? 0x9c00 : 0x9800;		//	check which location was set in LCDC for BG Map
+	tiledata = (((readFromMem(0xff40) >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
 	for (int i = 0; i < 256; i++) {
 		for (int j = 0; j < 256; j++) {
 			//	which tile no. is wanted from tiledata
-			tilenr = memory[tilemap + ((i / 8 * 32) + (j / 8))];
+			tilenr = readFromMem(tilemap + ((i / 8 * 32) + (j / 8)));
 			//	get color value for the current pixel (00, 01, 10, 11)
-			colorval = (memory[tiledata + (tilenr * 0x10) + (i % 8 * 2)] >> (7 - (j % 8)) & 0x1) + (memory[tiledata + (tilenr * 0x10) + (i % 8 * 2) + 1] >> (7 - (j % 8)) & 0x1) * 2;
+			colorval = (readFromMem(tiledata + (tilenr * 0x10) + (i % 8 * 2)) >> (7 - (j % 8)) & 0x1) + (readFromMem(tiledata + (tilenr * 0x10) + (i % 8 * 2) + 1) >> (7 - (j % 8)) & 0x1) * 2;
 			//	if 0x8800 we adress as signed tilenr from 0x9000 being tile 0 (overwrite the original value)
 			if (tiledata == 0x8800) {
-				colorval = (memory[tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2)] >> (7 - (j % 8)) & 0x1) + ((memory[tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2) + 1] >> (7 - (j % 8)) & 0x1) * 2);
+				colorval = (readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2)) >> (7 - (j % 8)) & 0x1) + ((readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2) + 1) >> (7 - (j % 8)) & 0x1) * 2);
 			}
 			//	get real color from palette
-			colorfrompal = ( memory[0xff47] >> (2 * colorval) ) & 3;
-			//printf("%d ", colorfrompal);
+			colorfrompal = ( readFromMem(0xff47) >> (2 * colorval) ) & 3;
 			bgmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
 			bgmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
 			bgmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
@@ -68,27 +69,27 @@ void createBGMap(unsigned char memory[]) {
 	}
 }
 
-void createWindow(unsigned char memory[]) {
+void createWindow() {
 	/*
 	LCDC Register = 0xFF40
 	Bit 6 - Window Tile Map Display Select
 		0: $9800-$9BFF
 		1: $9C00-$9FFF
 	*/
-	tilemap = (((memory[0xff40] >> 5) & 1) == 1) ? 0x9c00 : 0x9800;	//	check which location was set in LCDC for BG Map
-	tiledata = (((memory[0xff40] >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
+	tilemap = (((readFromMem(0xff40) >> 5) & 1) == 1) ? 0x9c00 : 0x9800;	//	check which location was set in LCDC for BG Map
+	tiledata = (((readFromMem(0xff40) >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
 	for (int i = 0; i < 256; i++) {
 		for (int j = 0; j < 256; j++) {
 			//	which tile no. is wanted from tiledata
-			tilenr = memory[tilemap + ((i / 8 * 32) + (j / 8))];
+			tilenr = readFromMem(tilemap + ((i / 8 * 32) + (j / 8)));
 			//	get color value for the current pixel (00, 01, 10, 11)
-			colorval = (memory[tiledata + (tilenr * 0x10) + (i % 8 * 2)] >> (7 - (j % 8)) & 0x1) + (memory[tiledata + (tilenr * 0x10) + (i % 8 * 2) + 1] >> (7 - (j % 8)) & 0x1) * 2;
+			colorval = (readFromMem(tiledata + (tilenr * 0x10) + (i % 8 * 2)) >> (7 - (j % 8)) & 0x1) + (readFromMem(tiledata + (tilenr * 0x10) + (i % 8 * 2) + 1) >> (7 - (j % 8)) & 0x1) * 2;
 			//	if 0x8800 we adress as signed tilenr from 0x9000 being tile 0 (overwrite the original value)
 			if (tiledata == 0x8800) {
-				colorval = (memory[tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2)] >> (7 - (j % 8)) & 0x1) + ((memory[tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2) + 1] >> (7 - (j % 8)) & 0x1) * 2);
+				colorval = (readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2)) >> (7 - (j % 8)) & 0x1) + ((readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (i % 8 * 2) + 1) >> (7 - (j % 8)) & 0x1) * 2);
 			}
 			//	get real color from palette
-			colorfrompal = (memory[0xff47] >> (2 * colorval)) & 3;
+			colorfrompal = (readFromMem(0xff47) >> (2 * colorval)) & 3;
 			winmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
 			winmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
 			winmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
@@ -96,7 +97,10 @@ void createWindow(unsigned char memory[]) {
 	}
 }
 
-void createSpriteMap(unsigned char memory[]) {
+void createSpriteMap() {
+
+	//	clear array
+	memset(spritemap, 0x69, sizeof(spritemap));
 
 	uint16_t pat = 0x8000;	//	sprite pattern table
 	uint16_t oam = 0xfe00;	//	oam ( sprite attribute table ); 0xfe00 - 0xfe9f; divided into 40 blocks, 4 bytes each
@@ -106,31 +110,34 @@ void createSpriteMap(unsigned char memory[]) {
 	for (uint16_t i = oam; i <= oam_end; i += 4) {
 
 		//	we assume for now, the origin of the sprite is in the lower right corner
-		uint8_t y = memory[i] - 8;		//	subtract 8, because 8x8 pixels, and we need the start in the array
-		uint8_t x = memory[i + 1] - 8;	//	same
-		uint8_t tilenr = memory[i + 2];
-		uint8_t flags = memory[i + 3];
+		uint8_t y = readFromMem(i) - 16;
+		uint8_t x = readFromMem(i + 1) - 8;
+		uint8_t tilenr = readFromMem(i + 2);
+		uint8_t flags = readFromMem(i + 3);
 		for(int u = 0; u < 8; u++)
 			for (int v = 0; v < 8; v++) {
-				colorval = (memory[pat + (tilenr * 0x10) + (u % 8 * 2)] >> (7 - (v % 8)) & 0x1) + (memory[pat + (tilenr * 0x10) + (u % 8 * 2) + 1] >> (7 - (v % 8)) & 0x1) * 2;
+				colorval = (readFromMem(pat + (tilenr * 0x10) + (u % 8 * 2)) >> (7 - (v % 8)) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u % 8 * 2) + 1) >> (7 - (v % 8)) & 0x1) * 2;
 
 				//	get real color from palette
-				colorfrompal = (memory[0xff48] >> (2 * colorval)) & 3;
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
-				spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
+				uint16_t pal = ((flags >> 4) & 1) ? 0xff49 : 0xff48;
+				colorfrompal = (readFromMem(pal) >> (2 * colorval)) & 3;
+				//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
+				if (colorval != 0 && ((y+u) <= 0xff) && ((x+v) <= 0xff)) {
+					spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
+					spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
+					spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
+				}
 			}
-		printf("object ");
 	}
 }
 
-void drawSpriteMap(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window* tWindow) {
+void drawSpriteMap(SDL_Renderer* tRenderer, SDL_Window* tWindow) {
 	//	setup PPU
 	SDL_Texture* tTexture;
 	tTexture = SDL_CreateTexture(tRenderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 256);
 
 	//	fill sprite map
-	createSpriteMap(memory);
+	createSpriteMap();
 
 	//	window decorations
 	char title[50];
@@ -143,20 +150,18 @@ void drawSpriteMap(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window* 
 	SDL_RenderPresent(tRenderer);
 }
 
-void drawBGMap(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window *tWindow) {
+void drawBGMap(SDL_Renderer* tRenderer, SDL_Window *tWindow) {
 
 	//	setup PPU
-	//SDL_SetRenderDrawColor(tRenderer, 159, 201, 143, 0);
-	//SDL_RenderClear(tRenderer);
 	SDL_Texture* tTexture;
 	tTexture = SDL_CreateTexture(tRenderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 256);
 
 	//	fill BGMap
-	createBGMap(memory);
+	createBGMap();
 
 	//	window decorations
 	char title[50];
-	snprintf(title, sizeof title, "[ bg map ][ tilemap: 0x%04x ][ tiledata: 0x%04x ][ LCDC: 0x%02x ]", tilemap, tiledata, memory[0xff40]);
+	snprintf(title, sizeof title, "[ bg map ][ tilemap: 0x%04x ][ tiledata: 0x%04x ][ LCDC: 0x%02x ]", tilemap, tiledata, readFromMem(0xff40));
 	SDL_SetWindowTitle(tWindow, title);
 
 	//	draw texture to renderer
@@ -166,31 +171,42 @@ void drawBGMap(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window *tWin
 }
 
 
-void drawLine(unsigned char memory[]) {
+void drawLine() {
 	//	clear the renderer
 	SDL_RenderClear(renderer);
 
 	//	refresh BG map
-	if(memory[0xff44] == 0)
-		createBGMap(memory);
+	if(readFromMem(0xff44) == 0)
+		createBGMap();
+
+	//	refresh OAM map (sprites)
+	createSpriteMap();
 
 	//	print by line, so image effects are possible
-	row = memory[0xff44];
+	row = readFromMem(0xff44);
 	yoff, xoff = 0;
 	for (int col = 0; col < 160; col++) {
-		yoff = ((memory[0xff42] + row) * 256 * 3);
+		yoff = ((readFromMem(0xff42) + row) * 256 * 3);
 		if (yoff >= FB_SIZE)
 			yoff -= FB_SIZE;
-		xoff = ((memory[0xff43] + col) * 3);
+		xoff = ((readFromMem(0xff43) + col) * 3);
 		if (xoff >= FB_SIZE)
 			xoff -= FB_SIZE;
 		framebuffer[(row * 160 * 3) + (col * 3)] = bgmap[yoff + xoff];
 		framebuffer[(row * 160 * 3) + (col * 3) + 1 ] = bgmap[yoff + xoff + 1];
 		framebuffer[(row * 160 * 3) + (col * 3) + 2 ] = bgmap[yoff + xoff + 2];
+
+		//	overwrite with sprites, if available
+		if(spritemap[yoff + xoff] != 0x69)
+			framebuffer[(row * 160 * 3) + (col * 3)] = spritemap[yoff + xoff];
+		if (spritemap[yoff + xoff + 1] != 0x69)
+			framebuffer[(row * 160 * 3) + (col * 3) + 1] = spritemap[yoff + xoff + 1];
+		if (spritemap[yoff + xoff + 2] != 0x69)
+			framebuffer[(row * 160 * 3) + (col * 3) + 2] = spritemap[yoff + xoff + 2];
 	}
 
 	//	draw if v-blank
-	if (memory[0xff44] == 0x8F) {
+	if (readFromMem(0xff44) == 0x8F) {
 		SDL_UpdateTexture(texture, NULL, framebuffer, 160 * sizeof(unsigned char) * 3);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
@@ -198,7 +214,7 @@ void drawLine(unsigned char memory[]) {
 
 }
 
-void drawBGTileset(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window* tWindow) {
+void drawBGTileset(SDL_Renderer* tRenderer, SDL_Window* tWindow) {
 
 	//	setup PPU
 	SDL_SetRenderDrawColor(tRenderer, 159, 201, 143, 0);
@@ -214,22 +230,22 @@ void drawBGTileset(unsigned char memory[], SDL_Renderer* tRenderer, SDL_Window* 
 		for (int j = 0; j < 16; j += 2)
 		{
 			int line[8];
-			line[0] = memory[i + j] & 0x1 + (memory[i + j + 1] & 0x1) * 2;
-			line[1] = (memory[i + j] >> 1) & 0x1 + ((memory[i + j + 1] >> 1) & 0x1) * 2;
-			line[2] = (memory[i + j] >> 2) & 0x1 + ((memory[i + j + 1] >> 2) & 0x1) * 2;
-			line[3] = (memory[i + j] >> 3) & 0x1 + ((memory[i + j + 1] >> 3) & 0x1) * 2;
-			line[4] = (memory[i + j] >> 4) & 0x1 + ((memory[i + j + 1] >> 4) & 0x1) * 2;
-			line[5] = (memory[i + j] >> 5) & 0x1 + ((memory[i + j + 1] >> 5) & 0x1) * 2;
-			line[6] = (memory[i + j] >> 6) & 0x1 + ((memory[i + j + 1] >> 6) & 0x1) * 2;
-			line[7] = (memory[i + j] >> 7) & 0x1 + ((memory[i + j + 1] >> 7) & 0x1) * 2;
+			line[0] = readFromMem(i + j) & 0x1 + (readFromMem(i + j + 1) & 0x1) * 2;
+			line[1] = (readFromMem(i + j) >> 1) & 0x1 + ((readFromMem(i + j + 1) >> 1) & 0x1) * 2;
+			line[2] = (readFromMem(i + j) >> 2) & 0x1 + ((readFromMem(i + j + 1) >> 2) & 0x1) * 2;
+			line[3] = (readFromMem(i + j) >> 3) & 0x1 + ((readFromMem(i + j + 1) >> 3) & 0x1) * 2;
+			line[4] = (readFromMem(i + j) >> 4) & 0x1 + ((readFromMem(i + j + 1) >> 4) & 0x1) * 2;
+			line[5] = (readFromMem(i + j) >> 5) & 0x1 + ((readFromMem(i + j + 1) >> 5) & 0x1) * 2;
+			line[6] = (readFromMem(i + j) >> 6) & 0x1 + ((readFromMem(i + j + 1) >> 6) & 0x1) * 2;
+			line[7] = (readFromMem(i + j) >> 7) & 0x1 + ((readFromMem(i + j + 1) >> 7) & 0x1) * 2;
 			for (int b = 0; b < 8; b++) {
 				//	0xff47 is the adress of the BG / Window palette
 				int x = (7 - b) + 8 * ((i - 0x8000) % 256) / 16;
 				int y = 8 * ((i - 0x8000) / 256) + (j / 2);
-				colorfrompal = (memory[0xff48] >> (2 * colorval)) & 3;
-				tFramebuffer[(y * 128 * 3) + (x * 3)] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
-				tFramebuffer[(y * 128 * 3) + (x * 3) + 1] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
-				tFramebuffer[(y * 128 * 3) + (x * 3) + 2] = COLORS[(memory[0xff47] >> (2 * line[b]) & 3)];
+				colorfrompal = (readFromMem(0xff48) >> (2 * colorval)) & 3;
+				tFramebuffer[(y * 128 * 3) + (x * 3)] = COLORS[(readFromMem(0xff47) >> (2 * line[b]) & 3)];
+				tFramebuffer[(y * 128 * 3) + (x * 3) + 1] = COLORS[(readFromMem(0xff47) >> (2 * line[b]) & 3)];
+				tFramebuffer[(y * 128 * 3) + (x * 3) + 2] = COLORS[(readFromMem(0xff47) >> (2 * line[b]) & 3)];
 			}
 		}
 	}

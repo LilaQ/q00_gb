@@ -3,14 +3,21 @@
 #include <fstream>
 #include "cpu.h"
 #include "ppu.h"
+#include "mmu.h"
 #include "structs.h"
+#include "helper.h"
+#include <string>
+#include <string.h>
 #include <iostream>
 #include <chrono>					//	keep track of time / frames 
 #include <thread>
 #include <Windows.h>
 #include <WinUser.h>
 #include "SDL2/include/SDL_syswm.h"
+#include "commctrl.h"
 #undef main
+
+using namespace std;
 
 //	Main RAM: 8K Byte
 //	Video RAM: 8K Byte
@@ -51,45 +58,20 @@
 //	0x4000	-	16kB switchable ROM bank	]---	Both ROMs = 32kB Cartridge
 //	0x0000	-	16kB ROM bank #0			]
 
-unsigned char gameboyBootROM[256] = {
-	0x31, 0xFE, 0xFF, 0xAF, 0x21, 0xFF, 0x9F, 0x32, 0xCB, 0x7C, 0x20, 0xFB,
-	0x21, 0x26, 0xFF, 0x0E, 0x11, 0x3E, 0x80, 0x32, 0xE2, 0x0C, 0x3E, 0xF3,
-	0xE2, 0x32, 0x3E, 0x77, 0x77, 0x3E, 0xFC, 0xE0, 0x47, 0x11, 0x04, 0x01,
-	0x21, 0x10, 0x80, 0x1A, 0xCD, 0x95, 0x00, 0xCD, 0x96, 0x00, 0x13, 0x7B,
-	0xFE, 0x34, 0x20, 0xF3, 0x11, 0xD8, 0x00, 0x06, 0x08, 0x1A, 0x13, 0x22,
-	0x23, 0x05, 0x20, 0xF9, 0x3E, 0x19, 0xEA, 0x10, 0x99, 0x21, 0x2F, 0x99,
-	0x0E, 0x0C, 0x3D, 0x28, 0x08, 0x32, 0x0D, 0x20, 0xF9, 0x2E, 0x0F, 0x18,
-	0xF3, 0x67, 0x3E, 0x64, 0x57, 0xE0, 0x42, 0x3E, 0x91, 0xE0, 0x40, 0x04,
-	0x1E, 0x02, 0x0E, 0x0C, 0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA, 0x0D, 0x20,
-	0xF7, 0x1D, 0x20, 0xF2, 0x0E, 0x13, 0x24, 0x7C, 0x1E, 0x83, 0xFE, 0x62,
-	0x28, 0x06, 0x1E, 0xC1, 0xFE, 0x64, 0x20, 0x06, 0x7B, 0xE2, 0x0C, 0x3E,
-	0x87, 0xE2, 0xF0, 0x42, 0x90, 0xE0, 0x42, 0x15, 0x20, 0xD2, 0x05, 0x20,
-	0x4F, 0x16, 0x20, 0x18, 0xCB, 0x4F, 0x06, 0x04, 0xC5, 0xCB, 0x11, 0x17,
-	0xC1, 0xCB, 0x11, 0x17, 0x05, 0x20, 0xF5, 0x22, 0x23, 0x22, 0x23, 0xC9,
-	0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83,
-	0x00, 0x0C, 0x00, 0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E,
-	0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99, 0xBB, 0xBB, 0x67, 0x63,
-	0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
-	0x3C, 0x42, 0xB9, 0xA5, 0xB9, 0xA5, 0x42, 0x3C, 0x21, 0x04, 0x01, 0x11,
-	0xA8, 0x00, 0x1A, 0x13, 0xBE, 0x20, 0xFE, 0x23, 0x7D, 0xFE, 0x34, 0x20,
-	0xF5, 0x06, 0x19, 0x78, 0x86, 0x23, 0x05, 0x20, 0xFB, 0x86, 0x20, 0xFE,
-	0x3E, 0x01, 0xE0, 0x50
-};
-
 //	Debug Vars
 unsigned char cartridge[0x10000];	//	64kb buffer (so max 64kb cartridges are supported for now with this buffer)
-const char* filename = "tetris.gb";
+string filename = "drm.gb";
 
 /*	blargg's tests filesnames:
 
 	01 - passed (special)
 	02 - passed (interrupts)
-	03 - passed (op sp, hl)
+	03 - passed (op sp, hl)					| not working in 'release' build
 	04 - passed (op r, imm)
 	05 - passed (op rp)
 	06 - passed (ld r, r)
-	07 - passed (jr, jp, call, ret, rst)
-	08 - passed (misc instructions)
+	07 - passed (jr, jp, call, ret, rst)	| not working in 'release' build
+	08 - passed (misc instructions)			| not working in 'release' build
 	09 - passed (op r, r)
 	10 - passed (bit ops)
 	11 - passed (op a, (hl))
@@ -103,7 +85,6 @@ SDL_Event event;					//	Eventhandler for all SDL events
 uint16_t pc = 0x0000;				//	Program Counter; our pointer that points to the current opcode; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint16_t sp = 0x0000;				//	Stack Pointer; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint8_t joypad = 0xff;				//	Storage for the joycon inputs
-unsigned char memory[0x10000];		//	Memory
 int interrupts_enabled = 0;
 Registers registers;
 Flags flags;
@@ -117,6 +98,8 @@ void handleWindowEvents(SDL_Event event);
 void handleInterrupts();
 void handleControls(unsigned char memory[]);
 void printDebug();
+void showMemoryMap();
+void showAbout();
 int main();
 
 //	reset Gameboy
@@ -129,7 +112,6 @@ void resetGameboy() {
 	pc = 0x0000;
 	sp = 0x0000;
 	joypad = 0xff;
-	memory[0x10000];
 	interrupts_enabled = 0;
 	registers = Registers();
 	flags = Flags();
@@ -159,23 +141,17 @@ int main() {
 	flags.H = 0;
 	flags.C = 0;
 
+	//	init MMU
+	initMMU();
+
 	//	load cartridge
-	FILE* file = fopen(filename, "rb");
+	FILE* file = fopen(filename.c_str(), "rb");
 	int pos = 0;
 	while (fread(&cartridge[pos], 1, 1, file)) {
 		pos++;
 	}
 	fclose(file);
-
-	//	copy cartridge to memory
-	for (int i = 0; i < sizeof(memory); i++) {
-		memory[i] = cartridge[i];
-	}
-
-	//	move boot ROM to memory
-	for (int i = 0; i < sizeof(gameboyBootROM); i++) {
-		memory[i] = gameboyBootROM[i];
-	}
+	loadROM(cartridge);
 
 	//	init PPU
 	initPPU();
@@ -195,13 +171,13 @@ int main() {
 		for (int i = 0; i < 154; i++) {
 
 			//	set LY
-			memory[0xff44] = i;
+			writeToMem(0xff44, i);
 
 			//	draw line
 			if (i < 144)
-				drawLine(memory);
+				drawLine();
 			else if (i == 144)
-				memory[0xff0f] |= 1;	//	vblank interrupt
+				writeToMem(0xff0f, readFromMem(0xff0f) | 1);
 
 			//	process cpu if system is not HALTed
 			int sum = 0;
@@ -211,28 +187,23 @@ int main() {
 			while (sum < (70224 / 4 / 154)) {
 				//	run cpu if not halted
 				if (!flags.HALT) {
-					//if(enlog)
-					//	printDebug();
+					/*if(enlog)
+						printDebug();*/
 
 					lpc = pc;
-					last = memory[0xff40];
-					if (pc == 0x005d)
-						printf("break");
+					last = readFromMem(0xff40);
+					/*if (pc == 0x2000) {
+						printf("FCU");
+					}*/
+					/*if (pc >= 0x2000)
+						printDebug();*/
 
 					//	process the instruction
-					cycle = processOpcode(pc, sp, memory, registers, flags, interrupts_enabled);
+					cycle = processOpcode(pc, sp, registers, flags, interrupts_enabled);
 					sum += cycle;
 
-					if (last != memory[0xff40]) {
-						last = memory[0xff40];
-						printf("0x%04x: changed LCDC to 0x%02x\n", lpc, memory[0xff40]);
-					}
-
-					if (pc == 0x100)
+					if (pc == 0x1ffc)
 						enlog = 1;
-
-					//if(pc == 0x02cf && enlog)
-					//	std::exit(EXIT_FAILURE);
 				}
 				//	if system is halted just idle, but still commence timers and condition for while loop
 				else {
@@ -247,14 +218,15 @@ int main() {
 				handleInterrupts();
 
 				//	blarggs test - serial output
-				/*if (memory[0xff02] == 0x81) {
-					char c = memory[0xff01];
+				if (readFromMem(0xff02) == 0x81) {
+					char c = readFromMem(0xff01);
 					printf("%c", c);
-					memory[0xff02] = 0x0;
-				}*/
+					readFromMem(0xff02) = 0x0;
+				}
 
 				//	set controls
-				memory[0xff00] = joypad;
+				//writeToMem(0xff00, joypad);
+				writeToMem(0xff00, 0xff);
 
 			}
 
@@ -268,14 +240,6 @@ int main() {
 		auto t_end = std::chrono::high_resolution_clock::now();
 		double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
 		std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));
-
-		//	lock ROM, load first 100 bytes from cartridge onces booted
-		if (ROMloaded && memory[0xff50] == 0x01) {
-			for (int i = 0; i < sizeof(gameboyBootROM); i++) {
-				memory[i] = cartridge[i];
-			}
-			ROMloaded = 0;
-		}
 	}
 
 	//	stop PPU
@@ -308,13 +272,13 @@ void printDebug() {
 		(registers.D << 8) | registers.E,
 		(registers.H << 8) | registers.L,
 		sp,
-		memory[0xff40]
+		readFromMem(0xff40)
 	);
 
 	printf("\t(%02X %02X %02X)\n",
-		memory[pc],
-		memory[pc + 1],
-		memory[pc + 2]
+		readFromMem(pc),
+		readFromMem(pc + 1),
+		readFromMem(pc + 2)
 	);
 }
 
@@ -323,21 +287,21 @@ void handleTimer(int cycle) {
 	div_clocksum += cycle;
 	if (div_clocksum >= 256) {
 		div_clocksum -= 256;
-		memory[0xff04]++;
+		aluToMem(0xff04, 1);
 	}
 
 	//	check if timer is on
-	if ((memory[0xff07] >> 2) & 0x1) {
+	if ((readFromMem(0xff07) >> 2) & 0x1) {
 		//	increase helper counter
 		timer_clocksum += cycle * 4;
 
 		//	set frequency
 		int freq = 4096;					//	Hz
-		if ((memory[0xff07] & 3) == 1)		//	mask last 2 bits
+		if ((readFromMem(0xff07) & 3) == 1)		//	mask last 2 bits
 			freq = 262144;
-		else if ((memory[0xff07] & 3) == 2)	//	mask last 2 bits
+		else if ((readFromMem(0xff07) & 3) == 2)	//	mask last 2 bits
 			freq = 65536;
-		else if ((memory[0xff07] & 3) == 3)	//	mask last 2 bits
+		else if ((readFromMem(0xff07) & 3) == 3)	//	mask last 2 bits
 			freq = 16384;
 
 		//printf("%d\n", freq);
@@ -345,13 +309,13 @@ void handleTimer(int cycle) {
 		//	increment the timer according to the frequency (synched to the processed opcodes)
 		while (timer_clocksum >= (4194304 / freq)) {
 			//	increase TIMA
-			memory[0xff05]++;
+			aluToMem(0xff05, 1);
 			//	check TIMA for overflow
-			if (memory[0xff05] == 0x00) {
+			if (readFromMem(0xff05) == 0x00) {
 				//	set timer interrupt request
-				memory[0xff0f] |= 4;
+				writeToMem(0xff0f, readFromMem(0xff0f) | 4);
 				//	reset timer to timer modulo
-				memory[0xff05] = memory[0xff06];
+				writeToMem(0xff05, readFromMem(0xff06));
 			}
 			timer_clocksum -= (4194304 / freq);
 		}
@@ -360,34 +324,35 @@ void handleTimer(int cycle) {
 
 void handleInterrupts() {
 	//	unHALT the system, once we have any interrupt
-	if (memory[0xffff] & memory[0xff0f] && flags.HALT) {
+	if (readFromMem(0xffff) & readFromMem(0xff0f) && flags.HALT) {
 		flags.HALT = 0;
 	}
 
 	//	handle interrupts
 	if (interrupts_enabled) {
 		//	some interrupt is enabled and allowed
-		if (memory[0xffff] & memory[0xff0f]) {
+		if (readFromMem(0xffff) & readFromMem(0xff0f)) {
 			//	handle interrupts by priority (starting at bit 0 - vblank)
 			
 			//	v-blank interrupt
-			if ((memory[0xffff] & 1) & (memory[0xff0f] & 1)) {
+			if ((readFromMem(0xffff) & 1) & (readFromMem(0xff0f) & 1)) {
 				sp--;
-				memory[sp] = pc >> 8;
+				writeToMem(sp, pc >> 8);
 				sp--;
-				memory[sp] = pc & 0xff;
+				writeToMem(sp, pc & 0xff);
 				pc = 0x40;
-				memory[0xff0f] &= ~1;
+				writeToMem(0xff0f, readFromMem(0xff0f) & ~1);
 			}
 
 			//	timer interrupt
-			else if ((memory[0xffff] & 4) & (memory[0xff0f] & 4)) {
+			else if ((readFromMem(0xffff) & 4) & (readFromMem(0xff0f) & 4)) {
+				printf("TIMER SHOT!\n");
 				sp--;
-				memory[sp] = pc >> 8;
+				writeToMem(sp, pc >> 8);
 				sp--;
-				memory[sp] = pc & 0xff;
+				writeToMem(sp, pc & 0xff);
 				pc = 0x50;
-				memory[0xff0f] &= ~4;
+				writeToMem(0xff0f, readFromMem(0xff0f) & ~4);
 			}
 
 			//	clear main interrupts_enable and corresponding flag
@@ -399,7 +364,10 @@ void handleInterrupts() {
 void initWindow() {
 	mainWindow = getWindow();
 	char title[50];
-	snprintf(title, sizeof title, "[ q00.gb ][ rom: %s ]", filename);
+	string rom = filename;
+	if (filename.find_last_of("\\") != string::npos)
+		rom = filename.substr(filename.find_last_of("\\") + 1);
+	snprintf(title, sizeof title, "[ q00.gb ][ rom: %s ]", rom.c_str());
 	SDL_SetWindowTitle(mainWindow, title);
 	SDL_SysWMinfo wmInfo;
 	SDL_VERSION(&wmInfo.version);
@@ -410,18 +378,18 @@ void initWindow() {
 	HMENU hEdit = CreateMenu();
 	HMENU hHelp = CreateMenu();
 	HMENU hDebugger = CreateMenu();
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "File");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hEdit, "Edit");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "Help");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "Debugger");
-	AppendMenu(hFile, MF_STRING, 0, "Load ROM");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "[ main ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
+	AppendMenu(hFile, MF_STRING, 9, "» Load ROM");
 	AppendMenu(hFile, MF_STRING, 7, "» Reset");
-	AppendMenu(hFile, MF_STRING, 1, "Exit");
-	AppendMenu(hEdit, MF_STRING, 2, "Configure Controls");
+	AppendMenu(hFile, MF_STRING, 1, "» Exit");
+	AppendMenu(hFile, MF_STRING, 2, "Configure Controls");
 	AppendMenu(hHelp, MF_STRING, 3, "About");
 	AppendMenu(hDebugger, MF_STRING, 4, "» Tile Map");
 	AppendMenu(hDebugger, MF_STRING, 5, "» BG Map");
 	AppendMenu(hDebugger, MF_STRING, 6, "» Sprite Map");
+	AppendMenu(hDebugger, MF_STRING, 8, "» Debugger");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -435,33 +403,67 @@ void handleWindowEvents( SDL_Event event) {
 	{
 		case SDL_SYSWMEVENT:
 			if (event.syswm.msg->msg.win.msg == WM_COMMAND) {
+				//	Exit
+				if (LOWORD(event.syswm.msg->msg.win.wParam) == 1) {
+					exit(0);
+				}
+				//	About
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 3) {
+					showAbout();
+				}
 				//	Tile Map
-				if (LOWORD(event.syswm.msg->msg.win.wParam) == 4) {
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 4) {
 					SDL_Window* tWindow;
 					SDL_Renderer* tRenderer;
 					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
 					SDL_SetWindowSize(tWindow, 256, 512);
-					drawBGTileset(memory, tRenderer, tWindow);
+					drawBGTileset(tRenderer, tWindow);
 				}
 				//	BG Map
-				if (LOWORD(event.syswm.msg->msg.win.wParam) == 5) {
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 5) {
 					SDL_Window* tWindow;
 					SDL_Renderer* tRenderer;
 					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
 					SDL_SetWindowSize(tWindow, 512, 512);
-					drawBGMap(memory, tRenderer, tWindow);
+					drawBGMap(tRenderer, tWindow);
 				}
 				//	Sprite Map
-				if (LOWORD(event.syswm.msg->msg.win.wParam) == 6) {
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 6) {
 					SDL_Window* tWindow;
 					SDL_Renderer* tRenderer;
 					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
 					SDL_SetWindowSize(tWindow, 512, 512);
-					drawSpriteMap(memory, tRenderer, tWindow);
+					drawSpriteMap(tRenderer, tWindow);
 				}
 				//	Reset
-				if (LOWORD(event.syswm.msg->msg.win.wParam) == 7) {
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 7) {
 					resetGameboy();
+				}
+				//	Memory Map
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 8) {
+					showMemoryMap();
+				}
+				//	Load ROM
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 9) {
+					printf("loading ROM");
+					char f[100];
+					OPENFILENAME ofn;
+
+					ZeroMemory(&f, sizeof(f));
+					ZeroMemory(&ofn, sizeof(ofn));
+					ofn.lStructSize = sizeof(ofn);
+					ofn.hwndOwner = NULL;  // If you have a window to center over, put its HANDLE here
+					ofn.lpstrFilter = "GameBoy Roms\0*.gb\0";
+					ofn.lpstrFile = f;
+					ofn.nMaxFile = MAX_PATH;
+					ofn.lpstrTitle = "[ rom selection ]";
+					ofn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+
+					if (GetOpenFileNameA(&ofn)) {
+						filename = f;
+						resetGameboy();
+					}
+
 				}
 			}
 			//	close a window
@@ -501,4 +503,196 @@ void handleWindowEvents( SDL_Event event) {
 				joypad ^= 0x08;
 			break;
 	};
+}
+
+void showAbout() {
+	SDL_Renderer* renderer;
+	SDL_Window* window;
+	SDL_Texture* texture;
+
+	//	init and create window and renderer
+	SDL_Init(SDL_INIT_VIDEO);
+	SDL_CreateWindowAndRenderer(500, 450, 0, &window, &renderer);
+	SDL_SetWindowSize(window, 500, 450);
+	SDL_SysWMinfo wmInfo;
+	SDL_VERSION(&wmInfo.version);
+	SDL_GetWindowWMInfo(window, &wmInfo);
+	SDL_SetWindowTitle(window, "[ q00.gb ][ about ]");
+
+	HWND hwnd = wmInfo.info.win.window;
+	HINSTANCE hInst = wmInfo.info.win.hinstance;
+	HWND hScroll = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 10, 70, 480, 370, hwnd, NULL, hInst, NULL);
+	string s = 
+		
+	"##(((((((((((((((((((((((((((((((((((((((((((((((#%((((((((\r\n"
+	"(((((((((((((((((((((((((((((((((((((((((((((((((#%((((((((\r\n"
+	"(((((((%#(((((((((((((((((((/((((((((((((((((/*,/#(((((##%&\r\n"
+	"((((((#(##((((((((((((((* .  ..,,((((((((((/,,,*/#(((#&@@@@\r\n"
+	"(((((((*..*//((((((*,..             *%%%&@#(/(#(#@@@@@@@&&&\r\n"
+	"((((((((. .,/*(#(,         ...    ,%%%%&&&&&%#%((&@@@@@@@@@\r\n"
+	"@@@@%,*,***/**/*,,,,**       .,,*,,,*,*((**,***(@@@@@@@@@@@\r\n"
+	"@@@@(***&@&@@&@@@@%%,,..*/,/@@@@@@@@@@%&@***/&@@@@@@@@@@@@@\r\n"
+	"%%&%@(,(@@&@@@@@@@@@@@/*////*@@@@@@@@@@@@@&%*(@@@@@@@@@@@@@\r\n"
+	"@@@@@&%*@@@@@@@@@@@@@@/#,   *%@@@@@@@@@@@@@*%@@@@@@@@@@@@@@\r\n"
+	"@@@@@@@&*#@@@@@@@@@@&/..,,,,.,#@@@@@@@@@@%/%@@@@@@@@@@@@@@&\r\n"
+	"@@@@@&@@@@(/&@@@@@(/*,...    ..**&@@@@@//&@@@@@@@@@###(((((\r\n"
+	"@@@@@@@@%#&(/*,.,.         ...,..,**/&@@@@@@@@@#(((((((((((\r\n"
+	"###%%%%###  ,///////(/*((((((#######, .@@@(((((((((((((((((\r\n"
+	"((((((((((/*((((((((/*(((*(//((/##((###..*&@@((((((((((((((\r\n"
+	"(((((((((( //,,/((#((((#(((((###*#%%/,. *%&((((((((((((((((\r\n"
+	"(((((((((/  ###*,##(#(###((###%,(%%%%#*.,  (&((((((((((((((\r\n"
+	"(((((((((,  ./%%//(##########%%,%%%%@*..  #((((((((((((((((\r\n"
+	"(((((((((  ..(&&%.######%###%%%,/%%&&(/,.    ((((((((((((((\r\n"
+	"((((((((.  .,,/(,*##%#%#%####%%##*/((, .      /((((((((((((\r\n"
+	"(((((((.    ((/,,(##%%%%#%##%%%%##/***/.     .#((((((((((((\r\n"
+	"(((((((     ,*,/(#%%%%&%%@#%%&%%%%%##((,     *%#(((((((((((\r\n"
+	"(((((((     .*(##%%&%&&&%%%%&%%&&&%%%#*.     ,#%(((((((((((\r\n"
+	"(((((((      .*##%%&%%&&&&%&%%&&&%&%%/......*%&@(((((((((((\r\n"
+	"(((((((*     ..(%&&&&&&&&&@&@&&%%#%%%%(%&@&@@@(((((((((((((\r\n"
+	"((((((((#%%##(*,**/*(/***/***,,,,,,,*#%&&&@@@@,./((((((((((\r\n"
+	"((((((((((((//*     ...,,**///,,*,,,(%@@@@@@@@@&..(@**,/(((\r\n"
+	"(((((((((((//((*.   .,*/**/(##(##&%&%#@@@@@@@@@@@,,(@%**/((\r\n"
+	"(((((((((((((/((*//*..,,,,/(&%&@@@&@@@@&@%@@@@@@@@#,(@@@%((\r\n"
+		
+		
+		;
+
+	const TCHAR* text = s.c_str();
+	HDC wdc = GetWindowDC(hScroll);
+	HFONT font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	LOGFONT lf;
+	GetObject(font, sizeof(LOGFONT), &lf);
+	lf.lfHeight = 10;
+	HFONT boldFont = CreateFontIndirect(&lf);
+	SendMessage(hScroll, WM_SETFONT, (WPARAM)boldFont, 60);
+	SendMessage(hScroll, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+
+
+	HWND hAb = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 10, 10, 480, 50, hwnd, NULL, hInst, NULL);
+	s = "(c) LilaQ - 2019 \r\n\r\ncontact : horsepenis @ gmail.com - no spam kthx";
+
+	text = s.c_str();
+	wdc = GetWindowDC(hAb);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	lf;
+	GetObject(font, sizeof(LOGFONT), &lf);
+	lf.lfHeight = 10;
+	boldFont = CreateFontIndirect(&lf);
+	SendMessage(hAb, WM_SETFONT, (WPARAM)boldFont, 60);
+	SendMessage(hAb, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+}
+
+void showMemoryMap() {
+
+	SDL_Renderer* renderer;
+	SDL_Window* window;
+	SDL_Texture* texture;
+
+	//	init and create window and renderer
+	SDL_Init(SDL_INIT_VIDEO);
+	SDL_CreateWindowAndRenderer(550, 470, 0, &window, &renderer);
+	SDL_SetWindowSize(window, 550, 470);
+	SDL_SysWMinfo wmInfo;
+	SDL_VERSION(&wmInfo.version);
+	SDL_GetWindowWMInfo(window, &wmInfo);
+	SDL_SetWindowTitle(window, "[ q00.gb ][ debugger ]");
+
+	HWND hwnd = wmInfo.info.win.window;
+	HINSTANCE hInst = wmInfo.info.win.hinstance;
+	HWND hScroll = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | WS_VSCROLL | ES_AUTOVSCROLL | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 10, 80, 530, 380, hwnd, NULL, hInst, NULL);
+
+	//	MEMDUMP Control
+	string s = "Offset      00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f\r\n\r\n";
+	for (int i = 0; i < 0x10000; i+=0x10) {
+		char title[70];
+		snprintf(title, sizeof title, "0x%04x      %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x \r\n", i,
+			readFromMem(i),
+			readFromMem(i + 1),
+			readFromMem(i + 2),
+			readFromMem(i + 3),
+			readFromMem(i + 4),
+			readFromMem(i + 5),
+			readFromMem(i + 6),
+			readFromMem(i + 7),
+			readFromMem(i + 8),
+			readFromMem(i + 9),
+			readFromMem(i + 10),
+			readFromMem(i + 11),
+			readFromMem(i + 12),
+			readFromMem(i + 13),
+			readFromMem(i + 14),
+			readFromMem(i + 15)
+		);
+		s.append((string)title);
+	}
+
+	const TCHAR* text = s.c_str();
+	HDC wdc = GetWindowDC(hScroll);
+	HFONT font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	LOGFONT lf;
+	GetObject(font, sizeof(LOGFONT), &lf);
+	lf.lfWeight = FW_LIGHT;
+	HFONT boldFont = CreateFontIndirect(&lf);
+	SendMessage(hScroll, WM_SETFONT, (WPARAM)boldFont, 60);
+	SendMessage(hScroll, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+
+	//	FLAGS Control
+	HWND hFlags = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 10, 10, 40, 60, hwnd, NULL, hInst, NULL);
+	s = "";
+	char title[70];
+	snprintf(title, sizeof title, "Z: %d\r\nN: %d\r\nH: %d\r\nC: %d\r\n", flags.Z, flags.N, flags.H, flags.C);
+	s.append((string)title);
+	text = s.c_str();
+	wdc = GetWindowDC(hFlags);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	SendMessage(hFlags, WM_SETFONT, (WPARAM)font, 60);
+	SendMessage(hFlags, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+
+	//	REGISTERS Control
+	HWND hRegs = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 60, 10, 70, 60, hwnd, NULL, hInst, NULL);
+	s = "";
+	title[70];
+	snprintf(title, sizeof title, "AF: %04x\r\nBC: %04x\r\nDE: %04x\r\nHL: %04x", (registers.A << 8) | ((flags.Z << 3) | (flags.N << 2) | (flags.H << 1) | (flags.C)), (registers.B << 8) | registers.C, (registers.D << 8) | registers.E, (registers.H << 8) | registers.L);
+	s.append((string)title);
+	text = s.c_str();
+	wdc = GetWindowDC(hRegs);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	SendMessage(hRegs, WM_SETFONT, (WPARAM)font, 60);
+	SendMessage(hRegs, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+
+	//	TIMER Control
+	HWND hAdrs = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 140, 10, 150, 60, hwnd, NULL, hInst, NULL);
+	s = "";
+	title[70];
+	snprintf(title, sizeof title, "IME        :    %d\r\n[0xFFFF] IE: 0x%02x\r\n[0xFF0F] IF: 0x%02x", interrupts_enabled, readFromMem(0xffff), readFromMem(0xff0f));
+	s.append((string)title);
+	text = s.c_str();
+	wdc = GetWindowDC(hAdrs);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	SendMessage(hAdrs, WM_SETFONT, (WPARAM)font, 60);
+	SendMessage(hAdrs, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+
+	//	ADRESSES Control
+	HWND hTts = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 300, 10, 160, 60, hwnd, NULL, hInst, NULL);
+	s = "";
+	title[70];
+	snprintf(title, sizeof title, "[0xFF40] LCDC: 0x%02x\r\n[0xFF41] STAT: 0x%02x\r\n[0xFF44] LY:   0x%02x", readFromMem(0xff40), readFromMem(0xff41), readFromMem(0xff44));
+	s.append((string)title);
+	text = s.c_str();
+	wdc = GetWindowDC(hTts);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	SendMessage(hTts, WM_SETFONT, (WPARAM)font, 60);
+	SendMessage(hTts, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
+	
+	//	SP / PC Control
+	HWND hPcSp = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 470, 10, 70, 60, hwnd, NULL, hInst, NULL);
+	s = "";
+	title[70];
+	snprintf(title, sizeof title, "SP: %04x\r\nPC: %04x", sp, pc);
+	s.append((string)title);
+	text = s.c_str();
+	wdc = GetWindowDC(hPcSp);
+	font = (HFONT)GetStockObject(ANSI_FIXED_FONT);
+	SendMessage(hPcSp, WM_SETFONT, (WPARAM)font, 60);
+	SendMessage(hPcSp, WM_SETTEXT, 60, reinterpret_cast<LPARAM>(text));
 }
