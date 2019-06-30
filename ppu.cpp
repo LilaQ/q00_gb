@@ -118,13 +118,35 @@ void createSpriteMap() {
 		uint8_t x = readFromMem(i + 1) - 8;
 		uint8_t tilenr = readFromMem(i + 2);
 		uint8_t flags = readFromMem(i + 3);
-		for(int u = 0; u < 8; u++)
+		uint8_t flip = (flags >> 5) & 0x01 | (((flags >> 6) & 0x01) << 1);
+		uint8_t height = ((readFromMem(0xff40) >> 2) & 0x01) ? 16 : 8;
+		for(int u = 0; u < height; u++)
 			for (int v = 0; v < 8; v++) {
-				colorval = (readFromMem(pat + (tilenr * 0x10) + (u % 8 * 2)) >> (7 - (v % 8)) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u % 8 * 2) + 1) >> (7 - (v % 8)) & 0x1) * 2;
+				switch (flags & 0x60)	//	mask flagging bits
+				{
+				case 0x00:	//	no flip
+					colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> (7 - v) & 0x1) * 2;
+					break;
+				case 0x20:	//	only x-flip
+					colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> v & 0x1) * 2;
+					break;
+					//	TODO
+				case 0x40:	//	only y-flip
+					colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) ) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> (7 - v) & 0x1) * 2;
+					break;
+					//	TODO
+				case 0x60:	//	x-flip and y-flip
+					colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) ) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> v & 0x1) * 2;
+					break;
+				default:
+					break;
+				}
+				
 
 				//	get real color from palette
 				uint16_t pal = ((flags >> 4) & 1) ? 0xff49 : 0xff48;
 				colorfrompal = (readFromMem(pal) >> (2 * colorval)) & 3;
+
 				//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
 				if (colorval != 0 && ((y+u) <= 0xff) && ((x+v) <= 0xff)) {
 					spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];

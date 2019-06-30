@@ -59,7 +59,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0x80000];	
-string filename = "drm.gb";
+string filename = "kirby.gb";
 
 /*	blargg's tests filesnames:
 
@@ -87,7 +87,6 @@ uint8_t joypad = 0xff;				//	Storage for the joycon inputs
 int interrupts_enabled = 0;
 Registers registers;
 Flags flags;
-bool ROMloaded = 1;
 int timer_clocksum = 0;
 int div_clocksum = 0;
 
@@ -112,9 +111,18 @@ void resetGameboy() {
 	sp = 0x0000;
 	joypad = 0xff;
 	interrupts_enabled = 0;
-	registers = Registers();
-	flags = Flags();
-	ROMloaded = 1;
+	registers.A = 0x00;
+	registers.B = 0x00;
+	registers.C = 0x00;
+	registers.D = 0x00;
+	registers.E = 0x00;
+	registers.H = 0x00;
+	registers.L = 0x00;
+	flags.C = 0x00;
+	flags.H = 0x00;
+	flags.N = 0x00;
+	flags.Z = 0x00;
+	flags.HALT = 0x00;
 	timer_clocksum = 0;
 	div_clocksum = 0;
 
@@ -161,6 +169,7 @@ int main() {
 	//	init timers
 	auto t_start = std::chrono::high_resolution_clock::now();
 	int enlog = 0;
+
 	//	start CPU
 	while (1) {
 		//	reset timer
@@ -216,13 +225,6 @@ int main() {
 				//	handle interrupts
 				handleInterrupts();
 
-				//	blarggs test - serial output
-				if (readFromMem(0xff02) == 0x81) {
-					char c = readFromMem(0xff01);
-					printf("%c", c);
-					readFromMem(0xff02) = 0x0;
-				}
-
 				//	set controls
 				//writeToMem(0xff00, joypad);
 				writeToMem(0xff00, 0xff);
@@ -236,9 +238,9 @@ int main() {
 		
 
 		//	sleep for proper cpu timing (per frame)
-		auto t_end = std::chrono::high_resolution_clock::now();
+		/*auto t_end = std::chrono::high_resolution_clock::now();
 		double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
-		std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));
+		std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));*/
 	}
 
 	//	stop PPU
