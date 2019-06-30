@@ -26,22 +26,80 @@ unsigned char gameboyBootROM[256] = {
 	0x3E, 0x01, 0xE0, 0x50
 };
 
-unsigned char memory[0x10000];		//	Memory
-unsigned char rom[0x10000];	//	Cartridge
+unsigned char memory[0x80000];		//	Memory
+unsigned char rom[0x80000];			//	Cartridge
 unsigned char romtype = 0x00;
+unsigned char *ram[8];				//	pointer to RAM
+
+uint8_t mbc1romEnabled = false;
+uint8_t mbc1romNumber = 0;
+uint8_t mbc1romMode = 0;
+uint8_t mbc1ramNumber = 0;
 
 void initMMU() {
 
 	//	clear memory
 	memory[0x10000];
 
+	//	set up ram, default 8kb
+	ram[0] = new unsigned char[0x2000];
+
 	//	load bootROM
 	loadBootROM();
 }
 
 //	read the actual ROM type from the cartridge
-void loadROMType() {
+void initROM() {
+
+	//	read and set romtype (MBC0, MBC1..)
 	romtype = readFromMem(0x0147);
+	if (romtype < 0x04 && romtype != 0x00)
+		romtype = 0x01;
+
+	//	read and set RAM size accordingly to rom
+	switch (readFromMem(0x0149))
+	{
+	case 0x01:
+		ram[0] = new unsigned char[0x800];
+		break;
+	case 0x02 :
+		ram[0] = new unsigned char[0x2000];
+		break;
+	case 0x03 :
+		ram[0] = new unsigned char[0x8000];
+		ram[1] = new unsigned char[0x8000];
+		ram[2] = new unsigned char[0x8000];
+		ram[3] = new unsigned char[0x8000];
+		break;
+	case 0x04 :
+		ram[0] = new unsigned char[0x8000];	//	prolly +mbc2 only
+		ram[1] = new unsigned char[0x8000];
+		ram[2] = new unsigned char[0x8000];
+		ram[3] = new unsigned char[0x8000];
+		ram[4] = new unsigned char[0x8000];
+		ram[5] = new unsigned char[0x8000];
+		ram[6] = new unsigned char[0x8000];
+		ram[7] = new unsigned char[0x8000];
+		ram[8] = new unsigned char[0x8000];
+		ram[9] = new unsigned char[0x8000];
+		ram[10] = new unsigned char[0x8000];
+		ram[11] = new unsigned char[0x8000];
+		ram[12] = new unsigned char[0x8000];
+		ram[13] = new unsigned char[0x8000];
+		ram[14] = new unsigned char[0x8000];
+		ram[15] = new unsigned char[0x8000];
+		break;
+	case 0x05 :
+		ram[0] = new unsigned char[0x8000];	//	prolly +mbc2 only
+		ram[1] = new unsigned char[0x8000];
+		ram[2] = new unsigned char[0x8000];
+		ram[3] = new unsigned char[0x8000];
+		ram[4] = new unsigned char[0x8000];
+		ram[5] = new unsigned char[0x8000];
+		ram[6] = new unsigned char[0x8000];
+		ram[7] = new unsigned char[0x8000];
+		break;
+	}
 }
 
 //	move boot ROM to memory
@@ -72,8 +130,10 @@ void dmaOAMtransfer() {
 
 //	copy cartridge to memory
 void loadROM(unsigned char c[]) {
-	for (int i = 0; i < sizeof(memory); i++) {
+	for (int i = 0; i < 0x8000; i++) {
 		memory[i] = c[i];
+	}
+	for (int i = 0; i < 0x80000; i++) {
 		rom[i] = c[i];
 	}
 
@@ -81,31 +141,75 @@ void loadROM(unsigned char c[]) {
 	loadBootROM();
 
 	//	set ROM type
-	loadROMType();
+	initROM();
 }
 
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
 	
-	//	[0xff50] - lock bootrom
-	if (adr == 0xff50 && val == 1)
-		lockBootROM();
+	//	MBC0
+	if (romtype == 0x00) {
+		
+		//	[0xff50] - lock bootrom
+		if (adr == 0xff50 && val == 1)
+			lockBootROM();
 
-	//	[0xff46] - oam dma transer
-	else if (adr == 0xff46)
-		dmaOAMtransfer();
+		//	[0xff46] - oam dma transer
+		else if (adr == 0xff46)
+			dmaOAMtransfer();
 
-	if (val == 0x01 && adr == 0x2000) {
-		int i = 0;
+		//	make ROM readonly
+		if (adr >= 0x8000)
+			memory[adr] = val;
 	}
+	//	MBC1
+	else if (romtype == 0x01) {
 
-	if (adr >= 0x8000)
-		memory[adr] = val;
+		//	[0xff50] - lock bootrom
+		if (adr == 0xff50 && val == 1) {
+			lockBootROM();
+		}
+		//	[0xff46] - oam dma transer
+		else if (adr == 0xff46) {
+			dmaOAMtransfer();
+		}
+		//	external RAM enable / disable
+		else if (adr < 0x2000) {
+			mbc1romEnabled = val > 0;
+		}
+		//	choose ROM bank nr (lower 5 bits, 0-4)
+		else if (adr < 0x4000) {
+			mbc1romNumber = val & 0x1f;
+			if (val == 0x00 || val == 0x20 || val == 0x40 || val == 0x60)
+				mbc1romNumber = val & 0x1f + 1;
+		}
+		//	choose RAM bank nr OR ROM bank top 2 bits (5-6)
+		else if (adr < 0x6000) {
+			//	mode: ROM bank 2 bits
+			if (mbc1romMode == 0)
+				mbc1romNumber |= (val & 3) << 5;
+			//	mode: RAM bank selection
+			else
+				mbc1ramNumber = val & 3;
+		}
+		else if (adr < 0x8000) {
+			mbc1romMode = val > 0;
+		}
+		else {
+			memory[adr] = val;
+		}
+	}
 }
 
 //	read a byte from memory
 unsigned char& readFromMem(uint16_t adr) {
-	return memory[adr];
+	//	write to memory, with the offset to the bank if necessary
+	if (mbc1romNumber && (adr >= 0x4000 && adr < 0x8000)) {
+		uint32_t target = (mbc1romNumber * 0x4000) + (adr - 0x4000);
+		return rom[target];
+	}
+	else
+		return memory[adr];
 }
 
 //	increase, decrease, add, subtract to value in memory

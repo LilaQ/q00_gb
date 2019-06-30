@@ -19,10 +19,12 @@ unsigned char bgmap[FB_SIZE];				//	3 bytes per pixel, RGB24
 unsigned char winmap[FB_SIZE];				//	3 bytes per pixel, RGB24
 unsigned char spritemap[FB_SIZE];			//	3 bytes per pixel, RGB24
 
+uint8_t SCY, SCX, STAT, LY, LYC;
+
 int tilemap;
 int tiledata;
 int tilenr, colorval, colorfrompal;
-int row, xoff, yoff;
+int row, xoff, yoff, xoffS, yoffS;
 
 int COLORS[] = {
 		0xff,
@@ -40,6 +42,9 @@ void initPPU() {
 
 	//	for fast rendering, create a texture
 	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 160, 144);
+	memset(bgmap, 0, FB_SIZE);
+	memset(spritemap, 0x69, FB_SIZE);
+	memset(winmap, 0, FB_SIZE);
 }
 
 SDL_Window* getWindow() {
@@ -47,7 +52,6 @@ SDL_Window* getWindow() {
 }
 
 void createBGMap() {
-	bgmap[FB_SIZE];
 	tilemap = (((readFromMem(0xff40) >> 3) & 1) == 1) ? 0x9c00 : 0x9800;		//	check which location was set in LCDC for BG Map
 	tiledata = (((readFromMem(0xff40) >> 4) & 1) == 1) ? 0x8000 : 0x8800;	//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
 	for (int i = 0; i < 256; i++) {
@@ -175,42 +179,59 @@ void drawLine() {
 	//	clear the renderer
 	SDL_RenderClear(renderer);
 
-	//	refresh BG map
-	if(readFromMem(0xff44) == 0)
-		createBGMap();
+	//	reset SCY, SCX for correct scrolling values
+	SCY = readFromMem(0xff42);
+	SCX = readFromMem(0xff43);
+
+	//	reset STAT
+	STAT = 0x00;
+
+	//	reset LY / LYC
+	LY = readFromMem(0xff44);
+	LYC = readFromMem(0xff45);
 
 	//	refresh OAM map (sprites)
-	createSpriteMap();
+	if (readFromMem(0xff44) == 0)
+		createSpriteMap();
 
 	//	print by line, so image effects are possible
 	row = readFromMem(0xff44);
-	yoff, xoff = 0;
 	for (int col = 0; col < 160; col++) {
-		yoff = ((readFromMem(0xff42) + row) * 256 * 3);
-		if (yoff >= FB_SIZE)
-			yoff -= FB_SIZE;
-		xoff = ((readFromMem(0xff43) + col) * 3);
-		if (xoff >= FB_SIZE)
-			xoff -= FB_SIZE;
+		yoff = ((SCY + row) * 256 * 3);
+		yoffS = (row * 256 * 3);
+		xoff = ((SCX + col) * 3);
+		if (xoff >= 768)	//	X-Wrapping; 768 = 256 * 3, saving calcs
+			xoff -= 768;
+		xoffS = (col * 3);
 		framebuffer[(row * 160 * 3) + (col * 3)] = bgmap[yoff + xoff];
 		framebuffer[(row * 160 * 3) + (col * 3) + 1 ] = bgmap[yoff + xoff + 1];
 		framebuffer[(row * 160 * 3) + (col * 3) + 2 ] = bgmap[yoff + xoff + 2];
 
 		//	overwrite with sprites, if available
-		if(spritemap[yoff + xoff] != 0x69)
-			framebuffer[(row * 160 * 3) + (col * 3)] = spritemap[yoff + xoff];
-		if (spritemap[yoff + xoff + 1] != 0x69)
-			framebuffer[(row * 160 * 3) + (col * 3) + 1] = spritemap[yoff + xoff + 1];
-		if (spritemap[yoff + xoff + 2] != 0x69)
-			framebuffer[(row * 160 * 3) + (col * 3) + 2] = spritemap[yoff + xoff + 2];
+		if (spritemap[yoffS + xoffS] != 0x69) {	//	if the first RGB value is 'transparent', we assume the whole pixel is transparent
+			framebuffer[(row * 160 * 3) + (col * 3)] = spritemap[yoffS + xoffS];
+			framebuffer[(row * 160 * 3) + (col * 3) + 1] = spritemap[yoffS + xoffS + 1];
+			framebuffer[(row * 160 * 3) + (col * 3) + 2] = spritemap[yoffS + xoffS + 2];
+		}
 	}
+
+	//	refresh BG map
+	if (readFromMem(0xff44) == 0)
+		createBGMap();
 
 	//	draw if v-blank
 	if (readFromMem(0xff44) == 0x8F) {
 		SDL_UpdateTexture(texture, NULL, framebuffer, 160 * sizeof(unsigned char) * 3);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
+		STAT |= 0x01;	//	set v-blank bit
 	}
+
+	//	set LY==LYC coincidence flag
+	STAT |= ((LY == LYC) << 2);
+
+	//	write STAT
+	writeToMem(0xff41, 0xc8 | STAT);
 
 }
 

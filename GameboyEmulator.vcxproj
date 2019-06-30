@@ -131,11 +131,9 @@
     <ClCompile Include="cpu.cpp" />
     <ClCompile Include="ppu.cpp" />
     <ClCompile Include="mmu.cpp" />
-    <ClCompile Include="helper.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h" />
-    <ClInclude Include="helper.h" />
     <ClInclude Include="mmu.h" />
     <ClInclude Include="ppu.h" />
     <ClInclude Include="structs.h" />

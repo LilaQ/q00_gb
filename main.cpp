@@ -5,7 +5,6 @@
 #include "ppu.h"
 #include "mmu.h"
 #include "structs.h"
-#include "helper.h"
 #include <string>
 #include <string.h>
 #include <iostream>
@@ -59,7 +58,7 @@ using namespace std;
 //	0x0000	-	16kB ROM bank #0			]
 
 //	Debug Vars
-unsigned char cartridge[0x10000];	//	64kb buffer (so max 64kb cartridges are supported for now with this buffer)
+unsigned char cartridge[0x80000];	
 string filename = "drm.gb";
 
 /*	blargg's tests filesnames:
@@ -328,6 +327,10 @@ void handleInterrupts() {
 		flags.HALT = 0;
 	}
 
+	//	check STAT for interrupt enables
+	if (((readFromMem(0xff41) >> 2) & 0x01) & ((readFromMem(0xff41) >> 6) & 0x01))
+		writeToMem(0xff0f, readFromMem(0xff0f) | 2);		//	trigger STAT interrupt
+
 	//	handle interrupts
 	if (interrupts_enabled) {
 		//	some interrupt is enabled and allowed
@@ -344,9 +347,18 @@ void handleInterrupts() {
 				writeToMem(0xff0f, readFromMem(0xff0f) & ~1);
 			}
 
+			//	lcd stat interrupt
+			if ((readFromMem(0xffff) & 2) & (readFromMem(0xff0f) & 2)) {
+				sp--;
+				writeToMem(sp, pc >> 8);
+				sp--;
+				writeToMem(sp, pc & 0xff);
+				pc = 0x48;
+				writeToMem(0xff0f, readFromMem(0xff0f) & ~2);
+			}
+
 			//	timer interrupt
 			else if ((readFromMem(0xffff) & 4) & (readFromMem(0xff0f) & 4)) {
-				printf("TIMER SHOT!\n");
 				sp--;
 				writeToMem(sp, pc >> 8);
 				sp--;
