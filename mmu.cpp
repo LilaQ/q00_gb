@@ -27,15 +27,20 @@ unsigned char gameboyBootROM[256] = {
 	0x3E, 0x01, 0xE0, 0x50
 };
 
-unsigned char memory[0x80000];		//	Memory
-unsigned char rom[0x80000];			//	Cartridge
+unsigned char memory[0xFA000];		//	Memory
+unsigned char rom[0xFA000];			//	Cartridge
 unsigned char romtype = 0x00;
 unsigned char *ram[8];				//	pointer to RAM
 
-uint8_t mbc1romEnabled = false;
 uint8_t mbc1romNumber = 1;
 uint8_t mbc1romMode = 0;
 uint8_t mbc1ramNumber = 0;
+uint8_t mbc1ramEnabled = false;
+
+uint8_t mbc3romNumber = 1;
+uint8_t mbc3romMode = 0;
+uint8_t mbc3ramNumber = 0;
+uint8_t mbc3ramEnabled = false;
 
 void initMMU() {
 
@@ -56,9 +61,11 @@ void initROM() {
 	romtype = readFromMem(0x0147);
 	if (romtype < 0x04 && romtype != 0x00)
 		romtype = 0x01;
+	if (romtype >= 0x0f && romtype <= 0x13)
+		romtype = 0x03;
 
 	//	read and set RAM size accordingly to rom
-	/*switch (readFromMem(0x0149))
+	switch (readFromMem(0x0149))
 	{
 	case 0x01:
 		ram[0] = new unsigned char[0x800];
@@ -100,7 +107,7 @@ void initROM() {
 		ram[6] = new unsigned char[0x8000];
 		ram[7] = new unsigned char[0x8000];
 		break;
-	}*/
+	}
 }
 
 //	move boot ROM to memory
@@ -134,7 +141,7 @@ void loadROM(unsigned char c[]) {
 	for (int i = 0; i < 0x8000; i++) {
 		memory[i] = c[i];
 	}
-	for (int i = 0; i < 0x80000; i++) {
+	for (int i = 0; i < 0xFA000; i++) {
 		rom[i] = c[i];
 	}
 
@@ -147,6 +154,10 @@ void loadROM(unsigned char c[]) {
 
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
+
+	if (adr == 0xff40 && (val == 0xe3 || val == 0xc3)) {
+		int a = 0;
+	}
 
 	//	[0xff50] - lock bootrom
 	if (adr == 0xff50 && val == 1) {
@@ -172,7 +183,7 @@ void writeToMem(uint16_t adr, unsigned char val) {
 
 		//	external RAM enable / disable
 		if (adr < 0x2000) {
-			mbc1romEnabled = val > 0;
+			mbc1ramEnabled = val > 0;
 		}
 		//	choose ROM bank nr (lower 5 bits, 0-4)
 		else if (adr < 0x4000) {
@@ -196,15 +207,66 @@ void writeToMem(uint16_t adr, unsigned char val) {
 			memory[adr] = val;
 		}
 	}
+	//	MBC3
+	else if (romtype == 0x03) {
+
+		//	external RAM enable / disable
+		if (adr < 0x2000) {
+			mbc3ramEnabled = val > 0;
+		}
+		//	choose ROM bank nr
+		else if (adr < 0x4000) {
+			mbc3romNumber = val;
+			if (val == 0x00)
+				mbc3romNumber = 0x01;
+		}
+		//	choose RAM bank nr OR RTC register (real time clock, for ingame cycles)
+		else if (adr < 0x6000) {
+			mbc3ramNumber = val;
+		}
+		//	TODO: latch clock delay
+		else if (adr < 0x8000) {
+		}
+		//	write to RAM
+		else if (mbc3ramEnabled && mbc3ramNumber && (adr >= 0xa000 && adr < 0xc000)) {
+			ram[mbc3romNumber][adr] = val;
+		}
+		//	any other write
+		else {
+			memory[adr] = val;
+		}
+	}
 }
 
 //	read a byte from memory
 unsigned char& readFromMem(uint16_t adr) {
-	//	write to memory, with the offset to the bank if necessary
+	//	MBC1 
 	if (romtype == 0x01 && mbc1romNumber && (adr >= 0x4000 && adr < 0x8000)) {
 		uint32_t target = (mbc1romNumber * 0x4000) + (adr - 0x4000);
 		return rom[target];
 	}
+	//	MBC3
+	else if (romtype == 0x03) {
+		//	ROM banking
+		if (mbc3romNumber && (adr >= 0x4000 && adr < 0x8000)) {
+			uint32_t target = (mbc3romNumber * 0x4000) + (adr - 0x4000);
+			return rom[target];
+		}
+		//	RAM / RTC banking
+		else if (mbc3ramEnabled && mbc3ramNumber && (adr >= 0xa000 && adr < 0xc000)) {
+			//	RAM bank
+			if (mbc3ramNumber < 0x08) {
+				return ram[mbc3ramNumber][adr];
+			}
+			//	RTC register
+			else {
+
+			}
+		}
+		else
+			return memory[adr];
+	}
+	//	No-MBC
 	else
 		return memory[adr];
 }

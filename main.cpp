@@ -58,7 +58,7 @@ using namespace std;
 //	0x0000	-	16kB ROM bank #0			]
 
 //	Debug Vars
-unsigned char cartridge[0x80000];	
+unsigned char cartridge[0xFA000];	
 string filename = "kirby.gb";
 
 /*	blargg's tests filesnames:
@@ -181,12 +181,6 @@ int main() {
 			//	set LY
 			writeToMem(0xff44, i);
 
-			//	draw line
-			if (i < 144)
-				drawLine();
-			else if (i == 144)
-				writeToMem(0xff0f, readFromMem(0xff0f) | 1);
-
 			//	process cpu if system is not HALTed
 			int sum = 0;
 			int cycle = 0;
@@ -231,11 +225,15 @@ int main() {
 
 			}
 
+			//	draw line
+			if (i < 144)
+				drawLine();
+			else if (i == 144)
+				writeToMem(0xff0f, readFromMem(0xff0f) | 1);
+
 			//	handle window events & controls
 			handleWindowEvents(event);
 		}
-
-		
 
 		//	sleep for proper cpu timing (per frame)
 		/*auto t_end = std::chrono::high_resolution_clock::now();
@@ -402,6 +400,7 @@ void initWindow() {
 	AppendMenu(hHelp, MF_STRING, 3, "About");
 	AppendMenu(hDebugger, MF_STRING, 4, "» Tile Map");
 	AppendMenu(hDebugger, MF_STRING, 5, "» BG Map");
+	AppendMenu(hDebugger, MF_STRING, 10, "» Window Map");
 	AppendMenu(hDebugger, MF_STRING, 6, "» Sprite Map");
 	AppendMenu(hDebugger, MF_STRING, 8, "» Debugger");
 	SetMenu(hwnd, hMenuBar);
@@ -478,6 +477,14 @@ void handleWindowEvents( SDL_Event event) {
 						resetGameboy();
 					}
 
+				}
+				//	Window Map
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 10) {
+					SDL_Window* tWindow;
+					SDL_Renderer* tRenderer;
+					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
+					SDL_SetWindowSize(tWindow, 512, 512);
+					drawWindowMap(tRenderer, tWindow);
 				}
 			}
 			//	close a window

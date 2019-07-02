@@ -19,7 +19,7 @@ unsigned char bgmap[FB_SIZE];				//	3 bytes per pixel, RGB24
 unsigned char winmap[FB_SIZE];				//	3 bytes per pixel, RGB24
 unsigned char spritemap[FB_SIZE];			//	3 bytes per pixel, RGB24
 
-uint8_t SCY, SCX, STAT, LY, LYC;
+uint8_t SCY, SCX, STAT, LY, LYC, LCDC, WY, WX;
 
 int tilemap;
 int tiledata;
@@ -44,7 +44,7 @@ void initPPU() {
 	texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 160, 144);
 	memset(bgmap, 0, FB_SIZE);
 	memset(spritemap, 0x69, FB_SIZE);
-	memset(winmap, 0, FB_SIZE);
+	memset(winmap, 0x00, FB_SIZE);
 }
 
 SDL_Window* getWindow() {
@@ -73,7 +73,11 @@ void createBGMap() {
 	}
 }
 
-void createWindow() {
+void createWindowMap() {
+
+	//	clear array
+	memset(winmap, 0x00, sizeof(winmap));
+
 	/*
 	LCDC Register = 0xFF40
 	Bit 6 - Window Tile Map Display Select
@@ -94,6 +98,8 @@ void createWindow() {
 			}
 			//	get real color from palette
 			colorfrompal = (readFromMem(0xff47) >> (2 * colorval)) & 3;
+
+			//	draw to array, if there is something to draw
 			winmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
 			winmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
 			winmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
@@ -110,50 +116,51 @@ void createSpriteMap() {
 	uint16_t oam = 0xfe00;	//	oam ( sprite attribute table ); 0xfe00 - 0xfe9f; divided into 40 blocks, 4 bytes each
 	uint16_t oam_end = 0xfe9f;
 
-	//	iterate through every object / sprite
-	for (uint16_t i = oam; i <= oam_end; i += 4) {
+	//	check if OBJ are supposed to be drawn right now
+	if ((readFromMem(0xff40) >> 1) & 0x01) {
+		//	iterate through every object / sprite
+		for (uint16_t i = oam; i <= oam_end; i += 4) {
 
-		//	we assume for now, the origin of the sprite is in the lower right corner
-		uint8_t y = readFromMem(i) - 16;
-		uint8_t x = readFromMem(i + 1) - 8;
-		uint8_t tilenr = readFromMem(i + 2);
-		uint8_t flags = readFromMem(i + 3);
-		uint8_t flip = (flags >> 5) & 0x01 | (((flags >> 6) & 0x01) << 1);
-		uint8_t height = ((readFromMem(0xff40) >> 2) & 0x01) ? 16 : 8;
-		for(int u = 0; u < height; u++)
-			for (int v = 0; v < 8; v++) {
-				switch (flags & 0x60)	//	mask flagging bits
-				{
-				case 0x00:	//	no flip
-					colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> (7 - v) & 0x1) * 2;
-					break;
-				case 0x20:	//	only x-flip
-					colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> v & 0x1) * 2;
-					break;
-					//	TODO
-				case 0x40:	//	only y-flip
-					colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) ) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> (7 - v) & 0x1) * 2;
-					break;
-					//	TODO
-				case 0x60:	//	x-flip and y-flip
-					colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) ) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> v & 0x1) * 2;
-					break;
-				default:
-					break;
+			//	we assume for now, the origin of the sprite is in the lower right corner
+			uint8_t y = readFromMem(i) - 16;
+			uint8_t x = readFromMem(i + 1) - 8;
+			uint8_t tilenr = readFromMem(i + 2);
+			uint8_t flags = readFromMem(i + 3);
+			uint8_t flip = (flags >> 5) & 0x01 | (((flags >> 6) & 0x01) << 1);
+			uint8_t height = ((readFromMem(0xff40) >> 2) & 0x01) ? 16 : 8;
+			for (int u = 0; u < height; u++)
+				for (int v = 0; v < 8; v++) {
+					switch (flags & 0x60)	//	mask flagging bits
+					{
+					case 0x00:	//	no flip
+						colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> (7 - v) & 0x1) * 2;
+						break;
+					case 0x20:	//	only x-flip
+						colorval = (readFromMem(pat + (tilenr * 0x10) + (u * 2)) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + (u * 2) + 1) >> v & 0x1) * 2;
+						break;
+					case 0x40:	//	only y-flip
+						colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2)) >> (7 - v) & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> (7 - v) & 0x1) * 2;
+						break;
+					case 0x60:	//	x-flip and y-flip
+						colorval = (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2)) >> v & 0x1) + (readFromMem(pat + (tilenr * 0x10) + ((height - u) * 2) + 1) >> v & 0x1) * 2;
+						break;
+					default:
+						break;
+					}
+
+
+					//	get real color from palette
+					uint16_t pal = ((flags >> 4) & 1) ? 0xff49 : 0xff48;
+					colorfrompal = (readFromMem(pal) >> (2 * colorval)) & 3;
+
+					//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
+					if (colorval != 0 && ((y + u) <= 0xff) && ((x + v) <= 0xff)) {
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
+					}
 				}
-				
-
-				//	get real color from palette
-				uint16_t pal = ((flags >> 4) & 1) ? 0xff49 : 0xff48;
-				colorfrompal = (readFromMem(pal) >> (2 * colorval)) & 3;
-
-				//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
-				if (colorval != 0 && ((y+u) <= 0xff) && ((x+v) <= 0xff)) {
-					spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
-					spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
-					spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
-				}
-			}
+		}
 	}
 }
 
@@ -172,6 +179,25 @@ void drawSpriteMap(SDL_Renderer* tRenderer, SDL_Window* tWindow) {
 
 	//	draw texture to renderer
 	SDL_UpdateTexture(tTexture, NULL, spritemap, 256 * sizeof(unsigned char) * 3);
+	SDL_RenderCopy(tRenderer, tTexture, NULL, NULL);
+	SDL_RenderPresent(tRenderer);
+}
+
+void drawWindowMap(SDL_Renderer* tRenderer, SDL_Window* tWindow) {
+	//	setup PPU
+	SDL_Texture* tTexture;
+	tTexture = SDL_CreateTexture(tRenderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, 256, 256);
+
+	//	fill sprite map
+	createWindowMap();
+
+	//	window decorations
+	char title[50];
+	snprintf(title, sizeof title, "[ window map ][ wx: 0x%02x ][ wy: 0x%02x ][ win_on: 0x%02x ]", WX, WY, 0);
+	SDL_SetWindowTitle(tWindow, title);
+
+	//	draw texture to renderer
+	SDL_UpdateTexture(tTexture, NULL, winmap, 256 * sizeof(unsigned char) * 3);
 	SDL_RenderCopy(tRenderer, tTexture, NULL, NULL);
 	SDL_RenderPresent(tRenderer);
 }
@@ -212,34 +238,54 @@ void drawLine() {
 	LY = readFromMem(0xff44);
 	LYC = readFromMem(0xff45);
 
-	//	refresh OAM map (sprites)
-	if (readFromMem(0xff44) == 0)
+	//	reset LCDC
+	LCDC = readFromMem(0xff40);
+
+	//	reset WX / WY
+	WY = readFromMem(0xff4a);
+	WX = readFromMem(0xff4b);
+
+	//	refresh BG map, OAM map, Win map
+	if (readFromMem(0xff44) == 0) {
+		createBGMap();
+		createWindowMap();
 		createSpriteMap();
+	}
 
 	//	print by line, so image effects are possible
-	row = readFromMem(0xff44);
 	for (int col = 0; col < 160; col++) {
-		yoff = ((SCY + row) * 256 * 3);
-		yoffS = (row * 256 * 3);
+		yoff = ((SCY + LY) * 256 * 3);
+		if (yoff >= 196608)	//	Y-Wrapping; 256 * 256 * 3, saving calcs
+			yoff -= 196608;
+		yoffS = (LY * 256 * 3);
 		xoff = ((SCX + col) * 3);
 		if (xoff >= 768)	//	X-Wrapping; 768 = 256 * 3, saving calcs
 			xoff -= 768;
 		xoffS = (col * 3);
-		framebuffer[(row * 160 * 3) + (col * 3)] = bgmap[yoff + xoff];
-		framebuffer[(row * 160 * 3) + (col * 3) + 1 ] = bgmap[yoff + xoff + 1];
-		framebuffer[(row * 160 * 3) + (col * 3) + 2 ] = bgmap[yoff + xoff + 2];
+		framebuffer[(LY * 160 * 3) + (col * 3)] = bgmap[yoff + xoff];
+		framebuffer[(LY * 160 * 3) + (col * 3) + 1 ] = bgmap[yoff + xoff + 1];
+		framebuffer[(LY * 160 * 3) + (col * 3) + 2 ] = bgmap[yoff + xoff + 2];
+
+		//	overwrite with winmap
+		if ((LCDC >> 5) & 0x01 == 1) {
+			if (WY <= LY && LY <= WY + 144) {
+				if ((WX - 7) <= col && col <= (WX - 7) + 160) {
+					framebuffer[(LY * 160 * 3) + (col * 3)] = winmap[yoffS + xoffS - (WY * 256 * 3) - ((WX - 7) * 3)];
+					framebuffer[(LY * 160 * 3) + (col * 3) + 1] = winmap[yoffS + xoffS + 1 - (WY * 256 * 3) - ((WX - 7) * 3)];
+					framebuffer[(LY * 160 * 3) + (col * 3) + 2] = winmap[yoffS + xoffS + 2 - (WY * 256 * 3) - ((WX - 7) * 3)];
+				}
+			}
+		}
 
 		//	overwrite with sprites, if available
 		if (spritemap[yoffS + xoffS] != 0x69) {	//	if the first RGB value is 'transparent', we assume the whole pixel is transparent
-			framebuffer[(row * 160 * 3) + (col * 3)] = spritemap[yoffS + xoffS];
-			framebuffer[(row * 160 * 3) + (col * 3) + 1] = spritemap[yoffS + xoffS + 1];
-			framebuffer[(row * 160 * 3) + (col * 3) + 2] = spritemap[yoffS + xoffS + 2];
+			//	only overwrite, if BG-to-OBJ priority set correctly
+			framebuffer[(LY * 160 * 3) + (col * 3)] = spritemap[yoffS + xoffS];
+			framebuffer[(LY * 160 * 3) + (col * 3) + 1] = spritemap[yoffS + xoffS + 1];
+			framebuffer[(LY * 160 * 3) + (col * 3) + 2] = spritemap[yoffS + xoffS + 2];
 		}
+		
 	}
-
-	//	refresh BG map
-	if (readFromMem(0xff44) == 0)
-		createBGMap();
 
 	//	draw if v-blank
 	if (readFromMem(0xff44) == 0x8F) {
@@ -249,11 +295,11 @@ void drawLine() {
 		STAT |= 0x01;	//	set v-blank bit
 	}
 
-	//	set LY==LYC coincidence flag
+	//	set LY==LYC coincidence flag; checking for LY+1 here, because we already drew the current line, and would be too late to interrupt
 	STAT |= ((LY == LYC) << 2);
 
 	//	write STAT
-	writeToMem(0xff41, 0xc8 | STAT);
+	writeToMem(0xff41, STAT | 0xc8);
 
 }
 
