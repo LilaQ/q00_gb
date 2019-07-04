@@ -59,7 +59,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "kirby.gb";
+string filename = "sm.gb";
 
 /*	blargg's tests filesnames:
 
@@ -111,18 +111,6 @@ void resetGameboy() {
 	sp = 0x0000;
 	joypad = 0xff;
 	interrupts_enabled = 0;
-	registers.A = 0x00;
-	registers.B = 0x00;
-	registers.C = 0x00;
-	registers.D = 0x00;
-	registers.E = 0x00;
-	registers.H = 0x00;
-	registers.L = 0x00;
-	flags.C = 0x00;
-	flags.H = 0x00;
-	flags.N = 0x00;
-	flags.Z = 0x00;
-	flags.HALT = 0x00;
 	timer_clocksum = 0;
 	div_clocksum = 0;
 
@@ -147,6 +135,7 @@ int main() {
 	flags.N = 0;
 	flags.H = 0;
 	flags.C = 0;
+	flags.HALT = 0x00;
 
 	//	init MMU
 	initMMU();
@@ -166,79 +155,59 @@ int main() {
 	//	init Window & create menu
 	initWindow();
 
+	//	init STAT?
+	writeToMem(0xff41, 0x80);
+
 	//	init timers
 	auto t_start = std::chrono::high_resolution_clock::now();
 	int enlog = 0;
 
+	//	init cycle counter
+	int sum = 0;
+	int cyc = 0;
+
 	//	start CPU
 	while (1) {
+
 		//	reset timer
-		t_start = std::chrono::high_resolution_clock::now();
+		if (readFromMem(0xff44) == 0) {
+			t_start = std::chrono::high_resolution_clock::now();
+		}
 
-		//	mix cpu and ppu together, framebased
-		for (int i = 0; i < 154; i++) {
+		stepPPU(cyc * 4);
+			
+		//	step cpu if not halted
+		if (!flags.HALT) {
+			cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
+		}
+		//	if system is halted just idle, but still commence timers and condition for while loop
+		else {
+			cyc = 1;
+		}
 
-			//	set LY
-			writeToMem(0xff44, i);
+		//	V-Blank interrupt IF
+		if(readFromMem(0xff44) == 144)
+			writeToMem(0xff0f, readFromMem(0xff0f) | 1);
 
-			//	process cpu if system is not HALTed
-			int sum = 0;
-			int cycle = 0;
-			uint16_t last = 0;
-			uint16_t lpc = 0;
-			while (sum < (70224 / 4 / 154)) {
-				//	run cpu if not halted
-				if (!flags.HALT) {
-					/*if(enlog)
-						printDebug();*/
+		//	handle timer
+		handleTimer(cyc);
 
-					lpc = pc;
-					last = readFromMem(0xff40);
-					/*if (pc == 0x2000) {
-						printf("FCU");
-					}*/
-					/*if (pc >= 0x2000)
-						printDebug();*/
+		//	handle interrupts
+		handleInterrupts();
 
-					//	process the instruction
-					cycle = processOpcode(pc, sp, registers, flags, interrupts_enabled);
-					sum += cycle;
+		//	set controls
+		//writeToMem(0xff00, joypad);
+		writeToMem(0xff00, 0xff);
 
-					if (pc == 0x1ffc)
-						enlog = 1;
-				}
-				//	if system is halted just idle, but still commence timers and condition for while loop
-				else {
-					sum += 1;		//	NOP
-					cycle = 1;
-				}
-
-				//	handle timer
-				handleTimer(cycle);
-
-				//	handle interrupts
-				handleInterrupts();
-
-				//	set controls
-				//writeToMem(0xff00, joypad);
-				writeToMem(0xff00, 0xff);
-
-			}
-
-			//	draw line
-			if (i < 144)
-				drawLine();
-			else if (i == 144)
-				writeToMem(0xff0f, readFromMem(0xff0f) | 1);
+		//	sleep for proper cpu timing (per frame)
+		if (readFromMem(0xff44) == 154) {
+			/*auto t_end = std::chrono::high_resolution_clock::now();
+			double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
+			std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));*/
 
 			//	handle window events & controls
 			handleWindowEvents(event);
 		}
-
-		//	sleep for proper cpu timing (per frame)
-		/*auto t_end = std::chrono::high_resolution_clock::now();
-		double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
-		std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));*/
 	}
 
 	//	stop PPU
@@ -247,31 +216,16 @@ int main() {
 	return 0;
 }
 
-void handleControls(unsigned char memory[]) {
-	/*uint8_t ar[256];
-	GetKeyboardState(ar);
-	memory[0xff00] = 0xff;*/
-	/*if (GetAsyncKeyState(VK_RIGHT)	& 0x8000)	{ memory[0xff00] |= 0x01; }
-	if (GetAsyncKeyState(VK_LEFT)	& 0x8000)	{ memory[0xff00] |= 0x02; }
-	if (GetAsyncKeyState(VK_UP)		& 0x8000)	{ memory[0xff00] |= 0x04; }
-	if (GetAsyncKeyState(VK_DOWN)	& 0x8000)	{ memory[0xff00] |= 0x08; }
-	if (GetAsyncKeyState(VK_RIGHT)	& 0x8000)	{ memory[0xff00] |= 0x01; }
-	if (GetAsyncKeyState('A')		& 0x8000)	{ memory[0xff00] ^= 0x01; }
-	if (GetAsyncKeyState('S')		& 0x8000)	{ memory[0xff00] ^= 0x02; }
-	if (GetAsyncKeyState('Y')		& 0x8000)	{ memory[0xff00] ^= 0x04; }
-	if (GetAsyncKeyState('X')		& 0x8000)	{ memory[0xff00] ^= 0x08; }*/
-}
-
 void printDebug() {
 	printf(
-		"PC: %04X, AF: %04X, BC: %04X, DE: %04X, HL: %04X, SP: %04X, LCDC: %04X",
+		"PC: %04X, AF: %04X, BC: %04X, DE: %04X, HL: %04X, SP: %04X, STAT: %04X",
 		pc,
 		(registers.A << 8) | (flags.Z << 7 | flags.N << 6 | flags.H << 5 | flags.C << 4),
 		(registers.B << 8) | registers.C,
 		(registers.D << 8) | registers.E,
 		(registers.H << 8) | registers.L,
 		sp,
-		readFromMem(0xff40)
+		readFromMem(0xff41)
 	);
 
 	printf("\t(%02X %02X %02X)\n",
@@ -326,10 +280,6 @@ void handleInterrupts() {
 	if (readFromMem(0xffff) & readFromMem(0xff0f) && flags.HALT) {
 		flags.HALT = 0;
 	}
-
-	//	check STAT for interrupt enables
-	if (((readFromMem(0xff41) >> 2) & 0x01) & ((readFromMem(0xff41) >> 6) & 0x01))
-		writeToMem(0xff0f, readFromMem(0xff0f) | 2);		//	trigger STAT interrupt
 
 	//	handle interrupts
 	if (interrupts_enabled) {

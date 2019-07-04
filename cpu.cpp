@@ -748,16 +748,9 @@ int op_add_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers) {
 #endif // DEBUG
 	flags.Z = 0;
 	flags.N = 0;
-	int8_t offset = (int8_t)readFromMem(pc + 1);
-	if (offset >= 0) {
-		flags.H = ((sp & 0xf) + (offset & 0xf)) > 0xf;
-		flags.C = ((sp & 0xff) + offset) > 0xff;
-	}
-	else {
-		flags.H = (sp & 0xf) < (offset & 0xf);
-		flags.C = (sp & 0xff) < offset;
-	}
-	sp += offset;
+	flags.H = ((sp & 0xf) + (readFromMem(pc + 1) & 0xf)) > 0xf;
+	flags.C = ((sp & 0xff) + readFromMem(pc + 1)) > 0xff;
+	sp += (int8_t)readFromMem(pc + 1);
 	pc += 2;
 	//	return m-cycles
 	return 4;
