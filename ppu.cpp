@@ -171,7 +171,7 @@ void calcWindow(uint8_t row) {
 	WY = readFromMem(0xff4a);
 	WX = readFromMem(0xff4b) - 7;
 
-	if ((LCDC >> 5) & 0x01 == 1) {
+	if (((LCDC >> 5) & 0x01) == 1) {
 		for (int j = 0; j < 256; j++) {
 			if (WX <= j && j <= WX + 160) {
 				if (WY <= row && row <= WY + 144) {
@@ -415,20 +415,9 @@ void stepPPU(uint8_t cycles) {
 	// ppuCycles += cycles
 	ppuCycles += cycles;
 
-	//	LYC==LC Coincidence flag
-	LY = readFromMem(0xff44);
-	LYC = readFromMem(0xff45);
-	if (LY == LYC) {
-		if ((readFromMem(0xff41) >> 6) & 0x01)
-			if (((readFromMem(0xff41) >> 2) & 0x01) == 0) {
-				writeToMem(0xff0f, readFromMem(0xff0f) | 2);		//	trigger STAT interrupt
-				writeToMem(0xff41, readFromMem(0xff41) | 4);
-			}
-	}
-	else
-		writeToMem(0xff41, readFromMem(0xff41) & ~4);
+	
 
-	// as soon as in H-Blank -> calc pixels for BG, Win, Sprites from (ppuCycles - cycles) up to ppuCycles
+	// as soon as in H-Blank -> calc pixels for BG, Win, Sprites from
 	if (ppuCycles > 252 && readFromMem(0xff44) < 145 && !lineCalcFlag) {
 		
 		//	calc BG for x cycles
@@ -455,9 +444,13 @@ void stepPPU(uint8_t cycles) {
 		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x00);
 	if(readFromMem(0xff44) >= 144)	//	V-Blank
 		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x01);
-
+	
 	// if vblank, draw once (drawFlag)
 	if (!frameDrawnFlag && readFromMem(0xff44) > 144) {
+		
+		//	V-Blank interrupt IF
+		writeToMem(0xff0f, readFromMem(0xff0f) | 1);
+
 		//	only draw if display is enabled
 		if ((LCDC >> 7) & 0x01 == 1) 
 			drawFrame();
@@ -476,12 +469,27 @@ void stepPPU(uint8_t cycles) {
 		lineCalcFlag = 0;
 	}
 
+	//	LYC==LC Coincidence flag
+	LY = readFromMem(0xff44);
+	LYC = readFromMem(0xff45);
+	if (LY == LYC) {
+		if ((readFromMem(0xff41) >> 6) & 0x01)
+			if (((readFromMem(0xff41) >> 2) & 0x01) == 0) {
+				writeToMem(0xff0f, readFromMem(0xff0f) | 2);		//	trigger STAT interrupt
+				writeToMem(0xff41, readFromMem(0xff41) | 4);
+			}
+	}
+	else
+		writeToMem(0xff41, readFromMem(0xff41) & ~4);
+
 	//	if LY > 154, LY = 0; reset draw flag
 	if (readFromMem(0xff44) > 154) {
 		writeToMem(0xff44, 0);
 		frameDrawnFlag = 0;
+
 	}
 
+	
 }
 
 void drawBGTileset(SDL_Renderer* tRenderer, SDL_Window* tWindow) {

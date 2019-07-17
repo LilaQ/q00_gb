@@ -4,6 +4,7 @@
 #include "cpu.h"
 #include "ppu.h"
 #include "mmu.h"
+#include "spu.h"
 #include "structs.h"
 #include <string>
 #include <string.h>
@@ -59,7 +60,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "sm.gb";
+string filename = "kirby.gb";
 
 /*	blargg's tests filesnames:
 
@@ -140,6 +141,9 @@ int main() {
 	//	init MMU
 	initMMU();
 
+	//	init SPU
+	initSPU();
+
 	//	load cartridge
 	FILE* file = fopen(filename.c_str(), "rb");
 	int pos = 0;
@@ -174,8 +178,6 @@ int main() {
 			t_start = std::chrono::high_resolution_clock::now();
 		}
 
-		stepPPU(cyc * 4);
-			
 		//	step cpu if not halted
 		if (!flags.HALT) {
 			cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
@@ -185,9 +187,9 @@ int main() {
 			cyc = 1;
 		}
 
-		//	V-Blank interrupt IF
-		if(readFromMem(0xff44) == 144)
-			writeToMem(0xff0f, readFromMem(0xff0f) | 1);
+		stepPPU(cyc * 4);
+
+		stepSPU(cyc * 4);
 
 		//	handle timer
 		handleTimer(cyc);
@@ -200,10 +202,10 @@ int main() {
 		writeToMem(0xff00, 0xff);
 
 		//	sleep for proper cpu timing (per frame)
-		if (readFromMem(0xff44) == 154) {
-			/*auto t_end = std::chrono::high_resolution_clock::now();
+		if (readFromMem(0xff44) >= 154) {
+			auto t_end = std::chrono::high_resolution_clock::now();
 			double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
-			std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));*/
+			std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));
 
 			//	handle window events & controls
 			handleWindowEvents(event);
@@ -479,7 +481,6 @@ void handleWindowEvents( SDL_Event event) {
 void showAbout() {
 	SDL_Renderer* renderer;
 	SDL_Window* window;
-	SDL_Texture* texture;
 
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
@@ -557,7 +558,6 @@ void showMemoryMap() {
 
 	SDL_Renderer* renderer;
 	SDL_Window* window;
-	SDL_Texture* texture;
 
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
@@ -622,7 +622,6 @@ void showMemoryMap() {
 	//	REGISTERS Control
 	HWND hRegs = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 60, 10, 70, 60, hwnd, NULL, hInst, NULL);
 	s = "";
-	title[70];
 	snprintf(title, sizeof title, "AF: %04x\r\nBC: %04x\r\nDE: %04x\r\nHL: %04x", (registers.A << 8) | ((flags.Z << 3) | (flags.N << 2) | (flags.H << 1) | (flags.C)), (registers.B << 8) | registers.C, (registers.D << 8) | registers.E, (registers.H << 8) | registers.L);
 	s.append((string)title);
 	text = s.c_str();
@@ -634,7 +633,6 @@ void showMemoryMap() {
 	//	TIMER Control
 	HWND hAdrs = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 140, 10, 150, 60, hwnd, NULL, hInst, NULL);
 	s = "";
-	title[70];
 	snprintf(title, sizeof title, "IME        :    %d\r\n[0xFFFF] IE: 0x%02x\r\n[0xFF0F] IF: 0x%02x", interrupts_enabled, readFromMem(0xffff), readFromMem(0xff0f));
 	s.append((string)title);
 	text = s.c_str();
@@ -646,7 +644,6 @@ void showMemoryMap() {
 	//	ADRESSES Control
 	HWND hTts = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 300, 10, 160, 60, hwnd, NULL, hInst, NULL);
 	s = "";
-	title[70];
 	snprintf(title, sizeof title, "[0xFF40] LCDC: 0x%02x\r\n[0xFF41] STAT: 0x%02x\r\n[0xFF44] LY:   0x%02x", readFromMem(0xff40), readFromMem(0xff41), readFromMem(0xff44));
 	s.append((string)title);
 	text = s.c_str();
@@ -658,7 +655,6 @@ void showMemoryMap() {
 	//	SP / PC Control
 	HWND hPcSp = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 470, 10, 70, 60, hwnd, NULL, hInst, NULL);
 	s = "";
-	title[70];
 	snprintf(title, sizeof title, "SP: %04x\r\nPC: %04x", sp, pc);
 	s.append((string)title);
 	text = s.c_str();

@@ -88,14 +88,6 @@ void initROM() {
 		ram[5] = new unsigned char[0x8000];
 		ram[6] = new unsigned char[0x8000];
 		ram[7] = new unsigned char[0x8000];
-		ram[8] = new unsigned char[0x8000];
-		ram[9] = new unsigned char[0x8000];
-		ram[10] = new unsigned char[0x8000];
-		ram[11] = new unsigned char[0x8000];
-		ram[12] = new unsigned char[0x8000];
-		ram[13] = new unsigned char[0x8000];
-		ram[14] = new unsigned char[0x8000];
-		ram[15] = new unsigned char[0x8000];
 		break;
 	case 0x05 :
 		ram[0] = new unsigned char[0x8000];	//	prolly +mbc2 only
