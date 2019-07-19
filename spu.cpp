@@ -11,7 +11,7 @@
 //	SC4 - Noise
 
 int SamplesPerSecond = 44100;			//	resolution
-uint16_t Amplitude = 18000;				//	volume
+int16_t Amplitude = 1000;				//	volume
 bool SoundIsPlaying = false;
 
 int cycle_count = 0;
@@ -22,7 +22,7 @@ uint32_t SC1timer = 0x00;
 uint32_t SC2timer = 0x00;
 uint8_t SC1dutyIndex = 0;
 uint8_t SC2dutyIndex = 0;
-uint8_t SC1pcc = 96;
+uint8_t SC1pcc = 95;
 
 uint8_t duties[4][8] = {
 	{0,0,0,0,0,0,0,1},			//	00 (0x0)
@@ -37,8 +37,8 @@ internal void SDLInitAudio(int32_t SamplesPerSecond, int32_t BufferSize)
 	SDL_AudioSpec AudioSettings = { 0 };
 
 	AudioSettings.freq = SamplesPerSecond;
-	AudioSettings.format = AUDIO_S16LSB;
-	//AudioSettings.channels = 2;
+	AudioSettings.format = AUDIO_S16LSB;		//	One of the modes that doesn't produce a high frequent pitched tone when having silence
+	AudioSettings.channels = 2;
 	//AudioSettings.samples = BufferSize;
 
 	SDL_OpenAudio(&AudioSettings, 0);
@@ -80,8 +80,8 @@ void stepSC1(uint8_t c) {
 		else
 			SC1timer--;
 
-		if (!SC1pcc--) {
-			SC1pcc = 96;
+		if (!--SC1pcc) {
+			SC1pcc = 95;
 			int duty = readFromMem(0xff11) >> 6;
 			SC1buf.push_back((duties[duty][SC1dutyIndex] == 1) ? Amplitude : 0);
 			SC1buf.push_back((duties[duty][SC1dutyIndex] == 1) ? Amplitude : 0);
@@ -110,19 +110,17 @@ void stepSC2(uint8_t c) {
 void stepSPU(unsigned char cycles) {
 
 	cycle_count += cycles;
-	//if (cycle_count >= 95 * 4) 
+	//if (cycle_count >= 95) 
 	{
 		cycle_count -= 95;
 
 		stepSC1(cycles);
 		//stepSC2(cycles);
 
-		if (SC1buf.size() >= 4096) {
+		if (SC1buf.size() >= 735*2*2) {
 			//	send audio data to device
-			while ((SDL_GetQueuedAudioSize(0)) > 4096 * 2) {
-				SDL_Delay(1);
-			}
-			SDL_QueueAudio(1, SC1buf.data(), 4096 * 2);
+			
+			SDL_QueueAudio(1, SC1buf.data(), SC1buf.size() * 2);
 
 			SC1buf.clear();
 			//SC2buf.clear();
@@ -133,16 +131,21 @@ void stepSPU(unsigned char cycles) {
 				SDL_PauseAudio(0);
 				SoundIsPlaying = true;
 			}
+			
+			//while (SDL_GetQueuedAudioSize(1) > 16655) {
+			//	//printf("%d\n", aaaa);
+			//	SDL_Delay(1);
+			//}
 		}
 	}
 }
 
 void initSPU() {
-
-	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_AUDIO);
+	SDL_setenv("SDL_AUDIODRIVER", "directsound", 1);
+	SDL_Init(SDL_INIT_AUDIO);
 
 	// Open our audio device; Sample Rate will dictate the pace of our synthesizer
-	SDLInitAudio(44100, 4096);
+	SDLInitAudio(44100, 735*2*2);
 
 }
 

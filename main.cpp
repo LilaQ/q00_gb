@@ -202,14 +202,14 @@ int main() {
 		writeToMem(0xff00, 0xff);
 
 		//	sleep for proper cpu timing (per frame)
-		if (readFromMem(0xff44) >= 154) {
-			auto t_end = std::chrono::high_resolution_clock::now();
-			double elapsed = 16.667 - std::chrono::duration<double, std::milli>(t_end - t_start).count();
-			std::this_thread::sleep_for(std::chrono::milliseconds((int)elapsed));
+		if (readFromMem(0xff44) == 154) {
+			while (16.667 > std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count()) {
+			}
 
 			//	handle window events & controls
 			handleWindowEvents(event);
 		}
+
 	}
 
 	//	stop PPU

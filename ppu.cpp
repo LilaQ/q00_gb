@@ -105,10 +105,12 @@ void calcBG(uint8_t row) {
 		//	which tile no. is wanted from tiledata
 		tilenr = readFromMem(tilemap + ((offY / 8 * 32) + (offX / 8)));
 		//	get color value for the current pixel (00, 01, 10, 11)
-		colorval = (readFromMem(tiledata + (tilenr * 0x10) + (offY % 8 * 2)) >> (7 - (offX % 8)) & 0x1) + (readFromMem(tiledata + (tilenr * 0x10) + (offY % 8 * 2) + 1) >> (7 - (offX % 8)) & 0x1) * 2;
 		//	if 0x8800 we adress as signed tilenr from 0x9000 being tile 0 (overwrite the original value)
 		if (tiledata == 0x8800) {
 			colorval = (readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (offY % 8 * 2)) >> (7 - (offX % 8)) & 0x1) + ((readFromMem(tiledata + 0x800 + ((int8_t)tilenr * 0x10) + (offY % 8 * 2) + 1) >> (7 - (offX % 8)) & 0x1) * 2);
+		}
+		else {
+			colorval = (readFromMem(tiledata + (tilenr * 0x10) + (offY % 8 * 2)) >> (7 - (offX % 8)) & 0x1) + (readFromMem(tiledata + (tilenr * 0x10) + (offY % 8 * 2) + 1) >> (7 - (offX % 8)) & 0x1) * 2;
 		}
 
 		//	get real color from palette
