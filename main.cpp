@@ -9,6 +9,7 @@
 #include <string>
 #include <string.h>
 #include <iostream>
+#include <cmath>
 #include <chrono>					//	keep track of time / frames 
 #include <thread>
 #include <Windows.h>
@@ -90,6 +91,8 @@ Registers registers;
 Flags flags;
 int timer_clocksum = 0;
 int div_clocksum = 0;
+double overhead = 0;
+int LYlast = 0;
 
 void initWindow();
 void handleTimer(int clocks);
@@ -173,11 +176,6 @@ int main() {
 	//	start CPU
 	while (1) {
 
-		//	reset timer
-		if (readFromMem(0xff44) == 0) {
-			t_start = std::chrono::high_resolution_clock::now();
-		}
-
 		//	step cpu if not halted
 		if (!flags.HALT) {
 			cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
@@ -201,15 +199,22 @@ int main() {
 		//writeToMem(0xff00, joypad);
 		writeToMem(0xff00, 0xff);
 
-		//	sleep for proper cpu timing (per frame)
-		if (readFromMem(0xff44) == 154) {
-			while (16.667 > std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count()) {
-			}
-
+		if (readFromMem(0xff44) == 154)
 			//	handle window events & controls
 			handleWindowEvents(event);
+
+		//	sleep for proper cpu timing (per frame)
+		if (readFromMem(0xff44) == 0 && LYlast>=154) {
+
+			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - overhead) < 16.667){
+			}
+			overhead = 16.667 - std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count();
+
+			t_start = std::chrono::high_resolution_clock::now();
 		}
 
+		//	store current line, to compare next iteration (for proper frame timing)
+		LYlast = readFromMem(0xff44);
 	}
 
 	//	stop PPU
