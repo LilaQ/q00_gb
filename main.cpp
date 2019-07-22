@@ -61,7 +61,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "kirby.gb";
+string filename = "test.gb";
 
 /*	blargg's tests filesnames:
 
@@ -102,25 +102,6 @@ void handleControls(unsigned char memory[]);
 void printDebug();
 void showMemoryMap();
 void showAbout();
-int main();
-
-//	reset Gameboy
-void resetGameboy() {
-
-	//	stop ppu
-	stopPPU();
-
-	//	reset vars
-	pc = 0x0000;
-	sp = 0x0000;
-	joypad = 0xff;
-	interrupts_enabled = 0;
-	timer_clocksum = 0;
-	div_clocksum = 0;
-
-	//	call main again
-	main();
-}
 
 int main() {
 
@@ -167,7 +148,6 @@ int main() {
 
 	//	init timers
 	auto t_start = std::chrono::high_resolution_clock::now();
-	int enlog = 0;
 
 	//	init cycle counter
 	int sum = 0;
@@ -196,8 +176,7 @@ int main() {
 		handleInterrupts();
 
 		//	set controls
-		//writeToMem(0xff00, joypad);
-		writeToMem(0xff00, 0xff);
+		writeToMem(0xff00, joypad);
 
 		if (readFromMem(0xff44) == 154)
 			//	handle window events & controls
@@ -206,9 +185,9 @@ int main() {
 		//	sleep for proper cpu timing (per frame)
 		if (readFromMem(0xff44) == 0 && LYlast>=154) {
 
-			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - overhead) < 16.667){
+			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - overhead) < 16.50){
 			}
-			overhead = 16.667 - std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count();
+			overhead = 16.50 - std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count();
 
 			t_start = std::chrono::high_resolution_clock::now();
 		}
@@ -221,6 +200,24 @@ int main() {
 	stopPPU();
 	
 	return 0;
+}
+
+//	reset Gameboy
+void resetGameboy() {
+
+	//	stop ppu
+	stopPPU();
+
+	//	reset vars
+	pc = 0x0000;
+	sp = 0x0000;
+	joypad = 0xff;
+	interrupts_enabled = 0;
+	timer_clocksum = 0;
+	div_clocksum = 0;
+
+	//	call main again
+	main();
 }
 
 void printDebug() {

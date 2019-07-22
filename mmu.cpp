@@ -1,4 +1,5 @@
 #include "mmu.h"
+#include "spu.h"
 #include <iostream>
 #include <cstdint>
 
@@ -147,10 +148,6 @@ void loadROM(unsigned char c[]) {
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
 
-	if (adr == 0xff40 && (val == 0xe3 || val == 0xc3)) {
-		int a = 0;
-	}
-
 	//	[0xff50] - lock bootrom
 	if (adr == 0xff50 && val == 1) {
 		lockBootROM();
@@ -161,6 +158,23 @@ void writeToMem(uint16_t adr, unsigned char val) {
 	else if (adr == 0xff46) {
 		dmaOAMtransfer();
 		memory[adr] = val;
+	}
+
+	//	[0xff11] - SC1 length reset
+	else if (adr == 0xff14) {
+		resetSC1length(readFromMem(0xff11) & 0x3f);
+	}
+	//	[0xff21] - SC2 length reset
+	else if (adr == 0xff19) {
+		resetSC2length(readFromMem(0xff16) & 0x3f);
+	}
+	//	[0xff31] - SC3 length reset
+	else if (adr == 0xff1e) {
+		resetSC3length(readFromMem(0xff1b));
+	}
+	//	[0xff41] - SC4 length reset
+	else if (adr == 0xff23) {
+		resetSC4length(val & 0x3f);
 	}
 	
 	//	MBC0
