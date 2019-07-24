@@ -61,7 +61,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "test.gb";
+string filename = "sm.gb";
 
 /*	blargg's tests filesnames:
 
@@ -122,12 +122,6 @@ int main() {
 	flags.C = 0;
 	flags.HALT = 0x00;
 
-	//	init MMU
-	initMMU();
-
-	//	init SPU
-	initSPU();
-
 	//	load cartridge
 	FILE* file = fopen(filename.c_str(), "rb");
 	int pos = 0;
@@ -137,17 +131,21 @@ int main() {
 	fclose(file);
 	loadROM(cartridge);
 
+	//	init MMU
+	initMMU();
+
+	//	init SPU
+	initSPU();
+
 	//	init PPU
 	initPPU();
 
 	//	init Window & create menu
 	initWindow();
 
-	//	init STAT?
-	writeToMem(0xff41, 0x80);
-
 	//	init timers
 	auto t_start = std::chrono::high_resolution_clock::now();
+	auto t_aftercpu = std::chrono::high_resolution_clock::now();
 
 	//	init cycle counter
 	int sum = 0;
@@ -156,14 +154,16 @@ int main() {
 	//	start CPU
 	while (1) {
 
+		int LY = readFromMem(0xff44);
+
 		//	step cpu if not halted
-		if (!flags.HALT) {
+		if (!flags.HALT) 
 			cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
-		}
 		//	if system is halted just idle, but still commence timers and condition for while loop
-		else {
+		else
 			cyc = 1;
-		}
+
+		t_aftercpu = std::chrono::high_resolution_clock::now();
 
 		stepPPU(cyc * 4);
 
@@ -175,25 +175,23 @@ int main() {
 		//	handle interrupts
 		handleInterrupts();
 
-		//	set controls
-		writeToMem(0xff00, joypad);
-
-		if (readFromMem(0xff44) == 154)
-			//	handle window events & controls
+		//	handle window events & controls in VBLANK
+		if (LY == 154)
 			handleWindowEvents(event);
 
 		//	sleep for proper cpu timing (per frame)
-		if (readFromMem(0xff44) == 0 && LYlast>=154) {
-
-			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - overhead) < 16.50){
-			}
-			overhead = 16.50 - std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count();
-
+		/*if (!LY && LYlast>=154) {
+			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() + overhead) < 16.742) {  }
+			overhead = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - 16.742;
+			if (overhead > 16.742)
+				overhead = 16.742;
+			if (overhead < 0)
+				overhead = 0;
 			t_start = std::chrono::high_resolution_clock::now();
-		}
+		}*/
 
 		//	store current line, to compare next iteration (for proper frame timing)
-		LYlast = readFromMem(0xff44);
+		LYlast = LY;
 	}
 
 	//	stop PPU
@@ -207,6 +205,9 @@ void resetGameboy() {
 
 	//	stop ppu
 	stopPPU();
+
+	// stop SPU
+	stopSPU();
 
 	//	reset vars
 	pc = 0x0000;
@@ -260,8 +261,6 @@ void handleTimer(int cycle) {
 			freq = 65536;
 		else if ((readFromMem(0xff07) & 3) == 3)	//	mask last 2 bits
 			freq = 16384;
-
-		//printf("%d\n", freq);
 
 		//	increment the timer according to the frequency (synched to the processed opcodes)
 		while (timer_clocksum >= (4194304 / freq)) {
@@ -447,38 +446,33 @@ void handleWindowEvents( SDL_Event event) {
 				PostMessage(event.syswm.msg->msg.win.hwnd, WM_CLOSE, 0, 0);
 			}
 			break;
-		case SDL_KEYUP:
-		case SDL_KEYDOWN:
-			//	reset controlls
-			joypad = 0xff;
-			joypad |= 0x10;
-			//	left key
-			if (event.key.keysym.scancode == SDL_SCANCODE_LEFT && event.key.state == SDL_PRESSED)
-				joypad ^= 0x91;
-			//	right key
-			if (event.key.keysym.scancode == SDL_SCANCODE_RIGHT && event.key.state == SDL_PRESSED)
-				joypad ^= 0x92;
-			//	up key
-			if (event.key.keysym.scancode == SDL_SCANCODE_UP && event.key.state == SDL_PRESSED)
-				joypad ^= 0x93;
-			//	down key
-			if (event.key.keysym.scancode == SDL_SCANCODE_DOWN && event.key.state == SDL_PRESSED)
-				joypad ^= 0x94;
-			//	A key
-			if (event.key.keysym.scancode == SDL_SCANCODE_A && event.key.state == SDL_PRESSED)
-				joypad ^= 0x01;
-			//	B key
-			if (event.key.keysym.scancode == SDL_SCANCODE_S && event.key.state == SDL_PRESSED)
-				joypad ^= 0x02;
-			//	Select key
-			if (event.key.keysym.scancode == SDL_SCANCODE_X && event.key.state == SDL_PRESSED)
-				joypad ^= 0x04;
-			//	Start key
-			if (event.key.keysym.scancode == SDL_SCANCODE_Y && event.key.state == SDL_PRESSED)
-				joypad ^= 0x08;
-			break;
 	};
+
 }
+
+uint8_t readInput(unsigned char val) {
+
+	const uint8_t* keys = SDL_GetKeyboardState(NULL);
+	//	Buttons
+	joypad = 0x0;
+	if ((val & 0x30) == 0x10) {
+		joypad |= keys[SDL_SCANCODE_A] ? 0 : 1;
+		joypad |= (keys[SDL_SCANCODE_S] ? 0 : 1) << 1;
+		joypad |= (keys[SDL_SCANCODE_X] ? 0 : 1) << 2;
+		joypad |= (keys[SDL_SCANCODE_Z] ? 0 : 1) << 3;
+	}
+	//	Joypad
+	else if ((val & 0x30) == 0x20) {
+		joypad |= keys[SDL_SCANCODE_RIGHT] ? 0 : 1;
+		joypad |= (keys[SDL_SCANCODE_LEFT] ? 0 : 1) << 1;
+		joypad |= (keys[SDL_SCANCODE_UP] ? 0 : 1) << 2;
+		joypad |= (keys[SDL_SCANCODE_DOWN] ? 0 : 1) << 3;
+	}
+	val &= 0xf0;
+	val |= 0xc0;
+	return (val | joypad);
+}
+
 
 void showAbout() {
 	SDL_Renderer* renderer;

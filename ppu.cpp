@@ -44,6 +44,12 @@ int COLORS[] = {
 void initPPU() {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
+	SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+	SDL_SetHint(SDL_HINT_RENDER_OPENGL_SHADERS, "1");
+	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
+	SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
+	//SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "10");
 	SDL_CreateWindowAndRenderer(160, 144, 0, &window, &renderer);
 	SDL_SetWindowSize(window, 480, 432);
 	SDL_SetWindowResizable(window, SDL_TRUE);
@@ -95,7 +101,7 @@ void calcBG(uint8_t row) {
 
 	tilemap = (((readFromMem(0xff40) >> 3) & 1) == 1) ? 0x9c00 : 0x9800;		//	check which location was set in LCDC for BG Map
 	tiledata = (((readFromMem(0xff40) >> 4) & 1) == 1) ? 0x8000 : 0x8800;		//	check which location was set in LCDC for BG / Window Tile Data (Catalog)
-
+	unsigned char p = readFromMem(0xff47);
 	for (int j = 0; j < 256; j++) {
 
 		//	handle wrapping
@@ -114,7 +120,7 @@ void calcBG(uint8_t row) {
 		}
 
 		//	get real color from palette
-		colorfrompal = (readFromMem(0xff47) >> (2 * colorval)) & 3;
+		colorfrompal = (p >> (2 * colorval)) & 3;
 		bgmapA[(row * 256 * 4) + (j * 4)] = COLORS[colorfrompal];
 		bgmapA[(row * 256 * 4) + (j * 4) + 1] = COLORS[colorfrompal];
 		bgmapA[(row * 256 * 4) + (j * 4) + 2] = COLORS[colorfrompal];
@@ -454,7 +460,7 @@ void stepPPU(uint8_t cycles) {
 		writeToMem(0xff0f, readFromMem(0xff0f) | 1);
 
 		//	only draw if display is enabled
-		if ((LCDC >> 7) & 0x01 == 1) 
+		if (((LCDC >> 7) & 0x01) == 1) 
 			drawFrame();
 		frameDrawnFlag = 1;
 

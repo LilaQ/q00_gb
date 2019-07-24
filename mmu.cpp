@@ -1,3 +1,4 @@
+#include "main.h"
 #include "mmu.h"
 #include "spu.h"
 #include <iostream>
@@ -148,8 +149,14 @@ void loadROM(unsigned char c[]) {
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
 
+	//	[0xff00] - joypad input
+	if (adr == 0xff00) {
+		memory[adr] = readInput(val);
+		return;
+	}
+
 	//	[0xff50] - lock bootrom
-	if (adr == 0xff50 && val == 1) {
+	else if (adr == 0xff50 && val == 1) {
 		lockBootROM();
 		memory[adr] = val;
 	}
@@ -246,6 +253,7 @@ void writeToMem(uint16_t adr, unsigned char val) {
 
 //	read a byte from memory
 unsigned char& readFromMem(uint16_t adr) {
+
 	//	MBC1 
 	if (romtype == 0x01 && mbc1romNumber && (adr >= 0x4000 && adr < 0x8000)) {
 		uint32_t target = (mbc1romNumber * 0x4000) + (adr - 0x4000);

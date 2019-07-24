@@ -57,6 +57,7 @@ bool SC2envelopeEnabled = false;
 bool SC4envelopeEnabled = false;
 bool SC1sweepEnabled = false;
 uint8_t SC1sweep = 0;
+uint16_t SC1sweepShadow = 0;
 uint8_t SC1envelope = 0;
 uint8_t SC2envelope = 0;
 uint8_t SC4envelope = 0;
@@ -71,6 +72,34 @@ uint8_t duties[4][8] = {
 	{0,1,1,1,1,1,1,0}			//	11 (0x3)
 };
 
+void AudioCallback(void* userdata, Uint8* stream, int len) {
+	float dst = 0x0;
+	float src = 0x0;
+	for (int i = 0; i < len * 4; i++) {
+		float res = 0;
+		if (i < SC1buf.size())
+			res += SC1buf.at(i);
+		if (i < SC2buf.size())
+			res += SC2buf.at(i);
+		if (i < SC3buf.size())
+			res += SC3buf.at(i);
+		/*if (i < SC4buf.size())
+			res += SC4buf.at(i);*/
+		Mixbuf.push_back(res);
+		*stream = Mixbuf.at(i);
+	}
+	//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used
+	//SDL_QueueAudio(1, Mixbuf.data(), Mixbuf.size() * 4);
+
+	//stream = (uint8_t*) Mixbuf.data();
+
+	SC1buf.clear();
+	SC2buf.clear();
+	SC3buf.clear();
+	SC4buf.clear();
+	Mixbuf.clear();
+}
+
 internal void SDLInitAudio(int32_t SamplesPerSecond, int32_t BufferSize)
 {
 	SDL_AudioSpec AudioSettings = { 0 };
@@ -79,6 +108,7 @@ internal void SDLInitAudio(int32_t SamplesPerSecond, int32_t BufferSize)
 	AudioSettings.format = AUDIO_F32SYS;		//	One of the modes that doesn't produce a high frequent pitched tone when having silence
 	AudioSettings.channels = 2;
 	AudioSettings.samples = BufferSize;
+	//AudioSettings.callback = AudioCallback;
 
 	SDL_OpenAudio(&AudioSettings, 0);
 
@@ -112,18 +142,20 @@ void stepSC1(uint8_t c) {
 				if (SC1sweep <= 0) {
 					//	reload sweep
 					SC1sweep = (readFromMem(0xff10) >> 4) & 7;
-					SC1amp += (SC1amp >> (readFromMem(0xff10) & 0x3)) * ((readFromMem(0xff11) >> 3) & 0x1) ? -1 : 1;
-					if (SC1amp > 2047 || SC1amp < 0)
-						SC1enabled = false;
+					SC1sweepShadow += (SC1sweepShadow >> (readFromMem(0xff10) & 0x3)) * ((readFromMem(0xff11) >> 3) & 0x1) ? -1 : 1;
+					if ((SC1sweepShadow <= 2047 && SC1sweepShadow >= 0) && (readFromMem(0xff10) & 0x3)) {
+						writeToMem(0xff13, SC1sweepShadow & 0xff);
+						writeToMem(0xff14, readFromMem(0xff14) & ((SC1sweepShadow >> 8) & 7));
+						SC1sweepShadow += (SC1sweepShadow >> (readFromMem(0xff10) & 0x3)) * ((readFromMem(0xff11) >> 3) & 0x1) ? -1 : 1;
+					}
 					else {
-						writeToMem(0xff13, SC1amp & 0xff);
-						writeToMem(0xff14, readFromMem(0xff14) & ((SC1amp >> 8) & 7));
+						SC1enabled = false;
 					}
 				}
 			}
 
 			//	handle length
-			if (SC1FrameSeq % 2 == 0 && ((readFromMem(0xff19) >> 6) & 1)) {
+			if (SC1FrameSeq % 2 == 0 && ((readFromMem(0xff14) >> 6) & 1)) {
 				SC1len--;
 				if (!SC1len) {
 					SC1enabled = false;
@@ -191,7 +223,7 @@ void stepSC2(uint8_t c) {
 			++SC2FrameSeq %= 8;
 
 			//	handle length
-			if (SC2FrameSeq % 2 == 1 && ((readFromMem(0xff19) >> 6) & 1)) {
+			if (SC2FrameSeq % 2 == 0 && ((readFromMem(0xff19) >> 6) & 1)) {
 				SC2len--;
 				if (!SC2len) {
 					SC2enabled = false;
@@ -385,32 +417,35 @@ void stepSPU(unsigned char cycles) {
 
 		float dst = 0x0;
 		float src = 0x0;
+
 		for (int i = 0; i < 4096; i++) {
 			float res = 0;
 			if (i < SC1buf.size())
 				res += SC1buf.at(i);
-			/*if(i < SC2buf.size())
+			if(i < SC2buf.size())
 				res += SC2buf.at(i);
 			if (i < SC3buf.size())
 				res += SC3buf.at(i);
 			if (i < SC4buf.size())
-				res += SC4buf.at(i);*/
+				res += SC4buf.at(i);
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used
-		SDL_QueueAudio(1, Mixbuf.data(), Mixbuf.size() * 4 );
+		SDL_QueueAudio(1, Mixbuf.data(), Mixbuf.size() * 4);
 		
 		SC1buf.clear();
 		SC2buf.clear();
 		SC3buf.clear();
 		SC4buf.clear();
 		Mixbuf.clear();
+		
+		while (SDL_GetQueuedAudioSize(1) > 4096 * 4 * 4) {}
 	}
 
 }
 
 void initSPU() {
-	//SDL_setenv("SDL_AUDIODRIVER", "directsound", 1);
+	SDL_setenv("SDL_AUDIODRIVER", "directsound", 1);
 	SDL_Init(SDL_INIT_AUDIO);
 
 	//	initial volumes
@@ -427,6 +462,15 @@ void initSPU() {
 		SDL_PauseAudio(0);
 		SoundIsPlaying = true;
 	}
+}
+
+void stopSPU() {
+	SDL_Quit();
+	SC1buf.clear();
+	SC2buf.clear();
+	SC3buf.clear();
+	SC4buf.clear();
+	SoundIsPlaying = false;
 }
 
 //	reloads the length counter for SC1, with all the other according settings

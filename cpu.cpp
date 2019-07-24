@@ -758,9 +758,8 @@ int op_add_sp(uint16_t& pc, uint16_t& sp, Flags& flags, Registers& registers) {
 
 
 int processOpcode(uint16_t& pc, uint16_t& sp, Registers& registers, Flags& flags, int& interrupts_enabled) {
-	opcode = readFromMem(pc);
 
-	switch (opcode) {
+	switch (readFromMem(pc)) {
 
 	//	STOP (TO DO)
 	case 0x10: pc++; return 1; break;

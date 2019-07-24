@@ -5,3 +5,5 @@ void resetSC1length(uint8_t val);
 void resetSC2length(uint8_t val);
 void resetSC3length(uint8_t val);
 void resetSC4length(uint8_t val);
+void stopSPU();
+void fixAudioLag();

@@ -137,6 +137,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cpu.h" />
+    <ClInclude Include="main.h" />
     <ClInclude Include="spu.h" />
     <ClInclude Include="mmu.h" />
     <ClInclude Include="ppu.h" />
