@@ -44,12 +44,8 @@ int COLORS[] = {
 void initPPU() {
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
-	SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
+	//SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
-	SDL_SetHint(SDL_HINT_RENDER_OPENGL_SHADERS, "1");
-	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
-	SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
-	//SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "10");
 	SDL_CreateWindowAndRenderer(160, 144, 0, &window, &renderer);
 	SDL_SetWindowSize(window, 480, 432);
 	SDL_SetWindowResizable(window, SDL_TRUE);

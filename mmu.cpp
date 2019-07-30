@@ -102,6 +102,27 @@ void initROM() {
 		ram[7] = new unsigned char[0x8000];
 		break;
 	}
+
+	//	initial wave channel data (some games rely on this data)
+	//	GB: 84 40 43 AA 2D 78 92 3C 60 59 59 B0 34 B8 2E DA
+	//	CGB: 00 FF 00 FF 00 FF 00 FF 00 FF 00 FF 00 FF 00 FF
+	//	TODO: CGB has different data
+	memory[0xff30] = 0x84;
+	memory[0xff31] = 0x40;
+	memory[0xff32] = 0x43;
+	memory[0xff33] = 0xaa;
+	memory[0xff34] = 0x2d;
+	memory[0xff35] = 0x78;
+	memory[0xff36] = 0x92;
+	memory[0xff37] = 0x3c;
+	memory[0xff38] = 0x60;
+	memory[0xff39] = 0x59;
+	memory[0xff3a] = 0x59;
+	memory[0xff3b] = 0xb0;
+	memory[0xff3c] = 0x34;
+	memory[0xff3d] = 0xb8;
+	memory[0xff3e] = 0x2e;
+	memory[0xff3f] = 0xda;
 }
 
 //	move boot ROM to memory
@@ -149,6 +170,15 @@ void loadROM(unsigned char c[]) {
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
 
+	//	[0xff26 - enable sound, all channels]
+	if (adr == 0xff26) {
+		if (val)
+			memory[0xff26] = 0xff;
+		else
+			memory[0xff26] = 0x00;
+		return;
+	}
+
 	//	[0xff00] - joypad input
 	if (adr == 0xff00) {
 		memory[adr] = readInput(val);
@@ -167,21 +197,29 @@ void writeToMem(uint16_t adr, unsigned char val) {
 		memory[adr] = val;
 	}
 
-	//	[0xff11] - SC1 length reset
-	else if (adr == 0xff14) {
+	//	[0xff11] - SC1 trigger
+	else if (adr == 0xff14 && (val >> 7)) {
+		memory[adr] = val;
 		resetSC1length(readFromMem(0xff11) & 0x3f);
+		return;
 	}
-	//	[0xff21] - SC2 length reset
-	else if (adr == 0xff19) {
+	//	[0xff21] - SC2 trigger
+	else if (adr == 0xff19 && (val >> 7)) {
+		memory[adr] = val;
 		resetSC2length(readFromMem(0xff16) & 0x3f);
+		return;
 	}
-	//	[0xff31] - SC3 length reset
-	else if (adr == 0xff1e) {
+	//	[0xff31] - SC3 trigger
+	else if (adr == 0xff1e && (val >> 7)) {
+		memory[adr] = val;
 		resetSC3length(readFromMem(0xff1b));
+		return;
 	}
-	//	[0xff41] - SC4 length reset
-	else if (adr == 0xff23) {
-		resetSC4length(val & 0x3f);
+	//	[0xff41] - SC4 trigger
+	else if (adr == 0xff23 && (val >> 7)) {
+		memory[adr] = val;
+		resetSC4length(readFromMem(0xff20) & 0x3f);
+		return;
 	}
 	
 	//	MBC0

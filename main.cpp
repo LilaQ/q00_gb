@@ -61,7 +61,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "sm.gb";
+string filename = "tennis.gb";
 
 /*	blargg's tests filesnames:
 
@@ -93,12 +93,12 @@ int timer_clocksum = 0;
 int div_clocksum = 0;
 double overhead = 0;
 int LYlast = 0;
+bool unpaused = 1;
 
 void initWindow();
 void handleTimer(int clocks);
 void handleWindowEvents(SDL_Event event);
 void handleInterrupts();
-void handleControls(unsigned char memory[]);
 void printDebug();
 void showMemoryMap();
 void showAbout();
@@ -154,44 +154,34 @@ int main() {
 	//	start CPU
 	while (1) {
 
-		int LY = readFromMem(0xff44);
+		if (unpaused) {
 
-		//	step cpu if not halted
-		if (!flags.HALT) 
-			cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
-		//	if system is halted just idle, but still commence timers and condition for while loop
-		else
-			cyc = 1;
+			//	step cpu if not halted
+			if (!flags.HALT)
+				cyc = processOpcode(pc, sp, registers, flags, interrupts_enabled);
+			//	if system is halted just idle, but still commence timers and condition for while loop
+			else
+				cyc = 1;
 
-		t_aftercpu = std::chrono::high_resolution_clock::now();
+			stepPPU(cyc * 4);
 
-		stepPPU(cyc * 4);
+			stepSPU(cyc * 4);
 
-		stepSPU(cyc * 4);
+			//	handle timer
+			handleTimer(cyc);
 
-		//	handle timer
-		handleTimer(cyc);
+			//	handle interrupts
+			handleInterrupts();
 
-		//	handle interrupts
-		handleInterrupts();
+			//	handle window events & controls in VBLANK
+			if (readFromMem(0xff44) == 154)
+				handleWindowEvents(event);
 
-		//	handle window events & controls in VBLANK
-		if (LY == 154)
+		}
+		else {
 			handleWindowEvents(event);
+		}
 
-		//	sleep for proper cpu timing (per frame)
-		/*if (!LY && LYlast>=154) {
-			while ((std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() + overhead) < 16.742) {  }
-			overhead = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - t_start).count() - 16.742;
-			if (overhead > 16.742)
-				overhead = 16.742;
-			if (overhead < 0)
-				overhead = 0;
-			t_start = std::chrono::high_resolution_clock::now();
-		}*/
-
-		//	store current line, to compare next iteration (for proper frame timing)
-		LYlast = LY;
 	}
 
 	//	stop PPU
@@ -343,9 +333,12 @@ void initWindow() {
 	HMENU hEdit = CreateMenu();
 	HMENU hHelp = CreateMenu();
 	HMENU hDebugger = CreateMenu();
+	HMENU hSavestates = CreateMenu();
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "[ main ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hSavestates, "[ savestates ]");
+	AppendMenu(hMenuBar, MF_STRING, 11, "[ ||> un/pause ]");
 	AppendMenu(hFile, MF_STRING, 9, "» Load ROM");
 	AppendMenu(hFile, MF_STRING, 7, "» Reset");
 	AppendMenu(hFile, MF_STRING, 1, "» Exit");
@@ -356,6 +349,8 @@ void initWindow() {
 	AppendMenu(hDebugger, MF_STRING, 10, "» Window Map");
 	AppendMenu(hDebugger, MF_STRING, 6, "» Sprite Map");
 	AppendMenu(hDebugger, MF_STRING, 8, "» Debugger");
+	AppendMenu(hSavestates, MF_STRING, 12, "» Save State");
+	AppendMenu(hSavestates, MF_STRING, 13, "» Load State");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -438,6 +433,36 @@ void handleWindowEvents( SDL_Event event) {
 					SDL_CreateWindowAndRenderer(256, 256, 0, &tWindow, &tRenderer);
 					SDL_SetWindowSize(tWindow, 512, 512);
 					drawWindowMap(tRenderer, tWindow);
+				}
+				//	pause / unpause
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 11) {
+					unpaused ^= 1;
+				}
+				//	save state
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 12) {
+					//	TODO STUB
+				}
+				//	load state
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 13) {
+					//	TODO STUB
+					printf("loading savestate\n");
+					char f[100];
+					OPENFILENAME ofn;
+
+					ZeroMemory(&f, sizeof(f));
+					ZeroMemory(&ofn, sizeof(ofn));
+					ofn.lStructSize = sizeof(ofn);
+					ofn.hwndOwner = NULL;
+					ofn.lpstrFilter = "GameBoy Savestates\0*.gbss\0";
+					ofn.lpstrFile = f;
+					ofn.nMaxFile = MAX_PATH;
+					ofn.lpstrTitle = "[ savestate selection ]";
+					ofn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+
+					if (GetOpenFileNameA(&ofn)) {
+						filename = f;
+						resetGameboy();
+					}
 				}
 			}
 			//	close a window
@@ -537,7 +562,7 @@ void showAbout() {
 
 
 	HWND hAb = CreateWindow("EDIT", NULL, WS_VISIBLE | WS_CHILD | ES_LEFT | WS_BORDER | ES_MULTILINE | ES_READONLY | ES_MULTILINE | ES_READONLY, 10, 10, 480, 50, hwnd, NULL, hInst, NULL);
-	s = "(c) LilaQ - 2019 \r\n\r\ncontact : horsepenis @ gmail.com - no spam kthx";
+	s = "(c) LilaQ - 2019 \r\n\r\ncontact : teh.lilaq @ gmail.com - no spam kthx";
 
 	text = s.c_str();
 	wdc = GetWindowDC(hAb);
