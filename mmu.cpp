@@ -1,6 +1,8 @@
+#define _CRT_SECURE_NO_DEPRECATE
 #include "main.h"
 #include "mmu.h"
 #include "spu.h"
+#include "structs.h"
 #include <iostream>
 #include <cstdint>
 
@@ -326,4 +328,96 @@ unsigned char& readFromMem(uint16_t adr) {
 //	increase, decrease, add, subtract to value in memory
 void aluToMem(uint16_t adr, int8_t val) {
 	memory[adr] += val;
+}
+
+void saveState(char filename[], Registers& registers, Flags& flags, uint16_t pc, uint16_t sp ) {
+
+	FILE* file = fopen(filename, "wb" );
+
+	//	write memory
+	fwrite(memory, sizeof(unsigned char), sizeof(memory), file);
+
+	//	write registers
+	unsigned char r[8] = {
+		registers.A,
+		registers.B,
+		registers.C,
+		registers.D,
+		registers.E,
+		registers.F,
+		registers.H,
+		registers.L
+	};
+	fwrite(r, sizeof(unsigned char), sizeof(r), file);
+
+	//	write flags
+	unsigned char f[4] = {
+		flags.Z,
+		flags.N,
+		flags.H,
+		flags.C
+	};
+	fwrite(f, sizeof(unsigned char), sizeof(f), file);
+
+	//	write pointers
+	uint16_t p[2] = {
+		pc,
+		sp
+	};
+	fwrite(p, sizeof(uint16_t), sizeof(p), file);
+
+	fclose(file);
+
+}
+
+void loadState(char filename[], Registers& registers, Flags& flags, uint16_t pc, uint16_t sp) {
+
+	FILE* file = fopen(filename, "rb");
+
+	//	read memory
+	int pos = 0;
+	while (pos < sizeof(memory)) {
+		fread(&memory[pos], sizeof(unsigned char), 1, file);
+		pos++;
+	}
+
+	//	read registers
+	unsigned char r[8];
+	pos = 0;
+	while (pos < 8) {
+		fread(&r[pos], sizeof(unsigned char), 1, file);
+		pos++;
+	}
+	registers.A = r[0];
+	registers.B = r[1];
+	registers.C = r[2];
+	registers.D = r[3];
+	registers.E = r[4];
+	registers.F = r[5];
+	registers.H = r[6];
+	registers.L = r[7];
+
+	//	write flags
+	unsigned char f[4];
+	pos = 0;
+	while (pos < 4) {
+		fread(&f[pos], sizeof(unsigned char), 1, file);
+		pos++;
+	}
+	flags.Z = f[0];
+	flags.N = f[1];
+	flags.H = f[2];
+	flags.C = f[3];
+
+	//	read pointers
+	uint16_t p[2];
+	pos = 0;
+	while (pos < 2) {
+		fread(&p[pos], sizeof(uint16_t), 1, file);
+		pos++;
+	}
+	pc = p[0];
+	sp = p[1];
+
+	fclose(file);
 }

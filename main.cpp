@@ -441,10 +441,32 @@ void handleWindowEvents( SDL_Event event) {
 				//	save state
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 12) {
 					//	TODO STUB
+					printf("saving state\n");
+					char f[100];
+					OPENFILENAME ofn;
+
+					ZeroMemory(&f, sizeof(f));
+					ZeroMemory(&ofn, sizeof(ofn));
+					ofn.lStructSize = sizeof(ofn);
+					ofn.hwndOwner = NULL;  // If you have a window to center over, put its HANDLE here
+					ofn.lpstrFilter = "GameBoy Savestates\0*.gbss\0";
+					ofn.lpstrFile = f;
+					ofn.lpstrDefExt = "gbss";
+					ofn.nMaxFile = MAX_PATH;
+					ofn.lpstrTitle = "[ rom selection ]";
+					ofn.Flags = OFN_DONTADDTORECENT;
+
+					if (GetSaveFileNameA(&ofn)) {
+						filename = f;
+						saveState(f, registers, flags, pc, sp);
+					}
 				}
 				//	load state
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 13) {
-					//	TODO STUB
+
+					//	halt emulation to avoid damaging the data
+					unpaused = false;
+
 					printf("loading savestate\n");
 					char f[100];
 					OPENFILENAME ofn;
@@ -461,8 +483,11 @@ void handleWindowEvents( SDL_Event event) {
 
 					if (GetOpenFileNameA(&ofn)) {
 						filename = f;
-						resetGameboy();
+						loadState(f, registers, flags, pc, sp);
 					}
+
+					//	resume emulation
+					unpaused = true;
 				}
 			}
 			//	close a window
