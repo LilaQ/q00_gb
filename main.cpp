@@ -83,7 +83,7 @@ string filename = "tennis.gb";
 //	Main Vars
 SDL_Window* mainWindow;				//	Main Window
 SDL_Event event;					//	Eventhandler for all SDL events
-uint16_t pc = 0x0000;				//	Program Counter; our pointer that points to the current opcode; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
+uint16_t pc = 0x0100;				//	Program Counter; our pointer that points to the current opcode; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint16_t sp = 0x0000;				//	Stack Pointer; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint8_t joypad = 0xff;				//	Storage for the joycon inputs
 int interrupts_enabled = 0;
@@ -151,6 +151,18 @@ int main() {
 	int sum = 0;
 	int cyc = 0;
 
+	readFromMem(0xff44) = 0x90;
+
+	//	print SDL
+	SDL_version compiled;
+	SDL_version linked;
+	SDL_VERSION(&compiled);
+	SDL_GetVersion(&linked);
+	printf("We compiled against SDL version %d.%d.%d ...\n",
+		compiled.major, compiled.minor, compiled.patch);
+	printf("But we are linking against SDL version %d.%d.%d.\n",
+		linked.major, linked.minor, linked.patch);
+
 	//	start CPU
 	while (1) {
 
@@ -162,6 +174,8 @@ int main() {
 			//	if system is halted just idle, but still commence timers and condition for while loop
 			else
 				cyc = 1;
+			/*if(pc < 0x100)
+				printf("PC: 0x%04x\n", pc);*/
 
 			stepPPU(cyc * 4);
 

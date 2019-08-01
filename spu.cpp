@@ -100,27 +100,39 @@ void stepSC1(uint8_t c) {
 		if (SC1pcFS == 8192) {
 			SC1pcFS = 0;
 			++SC1FrameSeq %= 8;
+
+			//	handle length
+			if ((SC1FrameSeq % 2 == 0) && SC1len && ((readFromMem(0xff14) >> 6) & 1)) {//&& ((readFromMem(0xff14) >> 6) & 1) && SC1pcFS == 0 && SC1len) {
+				SC1len--;
+				if (SC1len <= 0) {
+					SC1enabled = false;
+					printf("SC1 length expired\n");
+				}
+			}
+
+
+
 		}
 
 		//	handle sweep (frequency sweep)
-		if ((SC1FrameSeq == 2 || SC1FrameSeq == 6) && SC1pcFS == 0) {
+		if ((SC1FrameSeq == 2 || SC1FrameSeq == 6) && SC1pcFS == 0 && ((readFromMem(0xff10) >> 4) & 7) && (readFromMem(0xff10) & 7)) {
 
 			//	tick sweep down
 			--SC1sweepPeriod;
 			if (SC1sweepPeriod <= 0) {
 				//	reload sweep
-				//SC1sweepPeriod = (readFromMem(0xff10) >> 4) & 7;
-				/*if (SC1sweepPeriod == 0)
-					SC1sweepPeriod = 8;*/
+				SC1sweepPeriod = (readFromMem(0xff10) >> 4) & 7;
+				if (SC1sweepPeriod == 0)
+					SC1sweepPeriod = 8;
 				//	only sweep, if there is a sweep frequency set
-				if (((readFromMem(0xff10) >> 4) & 7) && SC1sweepEnabled) {
+				if (((readFromMem(0xff10) >> 4) & 7) && SC1sweepEnabled && (readFromMem(0xff10) & 7)) {
 					int SC1sweepShift = readFromMem(0xff10) & 7;
 					int SC1sweepNegate = ((readFromMem(0xff10) >> 3) & 1) ? -1 : 1;
 					uint16_t newfreq = SC1sweepShadow + ((SC1sweepShadow >> SC1sweepShift) * SC1sweepNegate);
 					if (newfreq < 2048 && SC1sweepShift) {
 						SC1sweepShadow = newfreq;
 						writeToMem(0xff13, SC1sweepShadow & 0xff);
-						writeToMem(0xff14, (readFromMem(0xff14) & 0xf8) | ((SC1sweepShadow >> 8) & 7));
+						writeToMem(0xff14, (SC1sweepShadow >> 8) & 7);
 						if ((SC1sweepShadow + ((SC1sweepShadow >> SC1sweepShift) * SC1sweepNegate)) > 2047) {
 							SC1enabled = false;
 							SC1sweepEnabled = false;
@@ -156,17 +168,11 @@ void stepSC1(uint8_t c) {
 		else
 			SC1freq = 0;
 
-		//	handle length
-		if (SC1FrameSeq % 2 == 0 && ((readFromMem(0xff14) >> 6) & 1) && SC1pcFS == 0 && SC1len) {
-			SC1len--;
-			if (SC1len <= 0) {
-				SC1enabled = false;
-				printf("SC1 length expired\n");
-			}
-		}
+		if ((readFromMem(0xff14) >> 6) & 1)
+			printf("SC1 length enabled: \n");
 
 		//	handle envelope (volume envelope)
-		if (SC1FrameSeq == 6 && SC1envelopeEnabled && SC1pcFS == 0) {
+		if (SC1FrameSeq == 7 && SC1pcFS == 0 && (readFromMem(0xff12) & 7) && SC1envelopeEnabled) {
 			//	tick envelope down
 			--SC1envelope;
 			//	when the envelope is done ticking to zero, it's time to trigger it's purpose
@@ -174,12 +180,15 @@ void stepSC1(uint8_t c) {
 				//	reload envelope tick count
 				SC1envelope = readFromMem(0xff12) & 7;
 				//	calc new frequence (+1 / -1)
-				int8_t newamp = SC1amp + (((readFromMem(0xff12) >> 3) & 1) ? 1 : -1);
+				uint8_t newamp = SC1amp + (((readFromMem(0xff12) >> 3) & 1) ? 1 : -1);
 				//	the new volume needs to be inside 0-15 range
 				if (newamp >= 0 && newamp <= 15) {
 					SC1amp = newamp;
 					SC1freq = SC1amp;
+					//if (newamp == 0)
+						//printf("tone silenced!\n");
 				}
+				//printf("ticking silencer: %d\n", SC1amp);
 				//	otherwise envelope is disabled
 				else
 					SC1envelopeEnabled = false;
@@ -189,7 +198,7 @@ void stepSC1(uint8_t c) {
 		if (!--SC1pcc) {
 			SC1pcc = 95;
 			//	enabled channel
-			if (SC1enabled && (readFromMem(0xff26) & 1)) {
+			if (SC1enabled && (readFromMem(0xff26) & 1) && (readFromMem(0xff25) & 0x11)) {
 				SC1buf.push_back((float)SC1freq / 100);
 				SC1buf.push_back((float)SC1freq / 100);
 			}
@@ -361,15 +370,15 @@ void stepSC4(uint8_t c) {
 			}
 
 			//	handle envelope (volume envelope)
-			if (SC4FrameSeq == 7 && SC4envelopeEnabled) {
+			if (SC4FrameSeq == 7 ) {
 				//	tick envelope down
 				--SC4envelope;
 				//	when the envelope is done ticking to zero, it's time to trigger it's purpose
 				if (SC4envelope <= 0) {
 					//	reload envelope tick count
 					SC4envelope = readFromMem(0xff21) & 7;
-					if (SC4envelope == 0)
-						SC4envelope = 8;
+					/*if (SC4envelope == 0)
+						SC4envelope = 8;*/
 					if ((readFromMem(0xff21) & 7) != 0) {
 						//	calc new frequence (+1 / -1)
 						int8_t newamp = SC4amp + (((readFromMem(0xff21) >> 3) & 1) ? 1 : -1);
@@ -377,10 +386,13 @@ void stepSC4(uint8_t c) {
 						if (newamp >= 0 && newamp <= 15)
 							SC4amp = newamp;
 						//	otherwise envelope is disabled
+						/*else
+							SC4envelopeEnabled = false;
 						if (SC4amp == 0 || SC4amp == 15) {
 							SC4envelopeEnabled = false;
-						}
+						}*/
 					}
+					printf("SC4 env : %d\n", SC4amp);
 				}
 			}
 		}
@@ -403,7 +415,7 @@ void stepSC4(uint8_t c) {
 		if (!--SC4pcc) {
 			SC4pcc = 95;
 			//	enabled channel
-			if (SC4enabled && ((readFromMem(0xff26) >> 3) & 1) && (readFromMem(0xff21) & 0xf8)) {
+			if (SC4enabled && ((readFromMem(0xff26) >> 3) & 1) && (readFromMem(0xff21) & 0xf8) && (readFromMem(0xff25) & 0x88)) {
 				//	push data to buffer
 				SC4buf.push_back((SC4lfsr & 0x1) ? 0 : (float) SC4amp / 100);
 				SC4buf.push_back((SC4lfsr & 0x1) ? 0 : (float) SC4amp / 100);
@@ -432,10 +444,10 @@ void stepSPU(unsigned char cycles) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			res += SC1buf.at(i);
-			/*res += SC2buf.at(i);
-			res += SC3buf.at(i);
-			res += SC4buf.at(i);*/
+			//res += SC1buf.at(i);
+			//res += SC2buf.at(i);
+			//res += SC3buf.at(i);
+			res += SC4buf.at(i);
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used
@@ -539,10 +551,12 @@ Noise channel's LFSR bits are all set to 1.
 Square 1's sweep does several things (see frequency sweep).
 */
 void resetSC1length(uint8_t val) {
-	
+
+	printf("SC1 reset\n");
+
 	//	reset length
-	if(!SC1len)
-		SC1len = 64;
+	if (SC1len == 0)
+		SC1len = 64 - val;
 
 	//	enable channel
 	SC1enabled = true;
@@ -573,6 +587,10 @@ void resetSC1length(uint8_t val) {
 			SC1enabled = false;
 		}
 	}
+
+	//	disable channel if dac is off
+	if ((readFromMem(0xff12) >> 3) == 0x0)
+		SC1enabled = false;
 }
 
 //	reloads the length counter for SC2, with all the other according settings
@@ -583,6 +601,10 @@ void resetSC2length(uint8_t val) {
 	SC2amp = readFromMem(0xff17) >> 4;
 	SC2envelope = readFromMem(0xff17) & 7;
 	SC2envelopeEnabled = true;
+
+	//	disable channel if dac is off
+	if ((readFromMem(0xff17) >> 3) == 0x0)
+		SC2enabled = false;
 }
 
 //	reloads the length counter for SC3, with all the other according settings
@@ -593,16 +615,26 @@ void resetSC3length(uint8_t val) {
 		SC3len = 256 - val;
 	SC3enabled = true;
 	SC3waveIndex = 0;
+
+	//	disable channel if dac is off
+	if ((readFromMem(0xff1a) >> 6) == 0x0)
+		SC3enabled = false;
 }
 
 //	reloads the length counter for SC4, with all the other according settings
 void resetSC4length(uint8_t val) {
+	printf("SC4 reset\n");
+
 	if (!SC4len)
 		SC4len = 64 - val;
 	SC4enabled = true;
 	SC4timer = SC4divisor[readFromMem(0xff22) & 0x7] << (readFromMem(0xff22) >> 4);
-	SC4lfsr = 0xffff;
+	SC4lfsr = 0x7fff;
 	SC4amp = readFromMem(0xff21) >> 4;
 	SC4envelope = readFromMem(0xff21) & 7;
 	SC4envelopeEnabled = true;
+
+	//	disable channel if dac is off
+	if ((readFromMem(0xff21) >> 3) == 0x0)
+		SC4enabled = false;
 }

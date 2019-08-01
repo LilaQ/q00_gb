@@ -67,6 +67,8 @@ void initROM() {
 		romtype = 0x01;
 	if (romtype >= 0x0f && romtype <= 0x13)
 		romtype = 0x03;
+	if (romtype == 0x05 || romtype == 0x06)
+		romtype = 0x02;
 
 	//	read and set RAM size accordingly to rom
 	switch (readFromMem(0x0149))
@@ -298,6 +300,10 @@ unsigned char& readFromMem(uint16_t adr) {
 	if (romtype == 0x01 && mbc1romNumber && (adr >= 0x4000 && adr < 0x8000)) {
 		uint32_t target = (mbc1romNumber * 0x4000) + (adr - 0x4000);
 		return rom[target];
+	}
+	//	MBC2
+	else if (romtype == 0x02) {
+
 	}
 	//	MBC3
 	else if (romtype == 0x03) {
