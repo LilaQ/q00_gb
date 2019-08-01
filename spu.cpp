@@ -106,7 +106,6 @@ void stepSC1(uint8_t c) {
 				SC1len--;
 				if (SC1len <= 0) {
 					SC1enabled = false;
-					printf("SC1 length expired\n");
 				}
 			}
 
@@ -168,9 +167,6 @@ void stepSC1(uint8_t c) {
 		else
 			SC1freq = 0;
 
-		if ((readFromMem(0xff14) >> 6) & 1)
-			printf("SC1 length enabled: \n");
-
 		//	handle envelope (volume envelope)
 		if (SC1FrameSeq == 7 && SC1pcFS == 0 && (readFromMem(0xff12) & 7) && SC1envelopeEnabled) {
 			//	tick envelope down
@@ -185,11 +181,7 @@ void stepSC1(uint8_t c) {
 				if (newamp >= 0 && newamp <= 15) {
 					SC1amp = newamp;
 					SC1freq = SC1amp;
-					//if (newamp == 0)
-						//printf("tone silenced!\n");
 				}
-				//printf("ticking silencer: %d\n", SC1amp);
-				//	otherwise envelope is disabled
 				else
 					SC1envelopeEnabled = false;
 			}
@@ -238,7 +230,6 @@ void stepSC2(uint8_t c) {
 				SC2len--;
 				if (!SC2len) {
 					SC2enabled = false;
-					printf("SC2 len expired, disabling channel! \n");
 				}
 			}
 
@@ -266,7 +257,7 @@ void stepSC2(uint8_t c) {
 		if (!--SC2pcc) {
 			SC2pcc = 95;
 			//	enabled channel
-			if (SC2enabled) {
+			if (SC2enabled && (readFromMem(0xff25) & 0x22)) {
 				int duty = readFromMem(0xff16) >> 6;
 				SC2buf.push_back((duties[duty][SC2dutyIndex] == 1) ? ((float)SC2amp / 100) : 0);
 				SC2buf.push_back((duties[duty][SC2dutyIndex] == 1) ? ((float)SC2amp / 100) : 0);
@@ -315,7 +306,7 @@ void stepSC3(uint8_t c) {
 					wave = wave >> 4;
 
 				//	if dac is enabled, output actual wave
-				if (readFromMem(0xff1a) >> 7) {
+				if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
 					SC3buf.push_back((float)wave / 100);
 					SC3buf.push_back((float)wave / 100);
 				}
@@ -365,7 +356,6 @@ void stepSC4(uint8_t c) {
 				SC4len--;
 				if (SC4len == 0) {
 					SC4enabled = false;
-					printf("SC4 disable\n");
 				}
 			}
 
@@ -385,14 +375,7 @@ void stepSC4(uint8_t c) {
 						//	the new volume needs to be inside 0-15 range
 						if (newamp >= 0 && newamp <= 15)
 							SC4amp = newamp;
-						//	otherwise envelope is disabled
-						/*else
-							SC4envelopeEnabled = false;
-						if (SC4amp == 0 || SC4amp == 15) {
-							SC4envelopeEnabled = false;
-						}*/
 					}
-					printf("SC4 env : %d\n", SC4amp);
 				}
 			}
 		}
@@ -444,9 +427,9 @@ void stepSPU(unsigned char cycles) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			//res += SC1buf.at(i);
-			//res += SC2buf.at(i);
-			//res += SC3buf.at(i);
+			res += SC1buf.at(i);
+			res += SC2buf.at(i);
+			res += SC3buf.at(i);
 			res += SC4buf.at(i);
 			Mixbuf.push_back(res);
 		}

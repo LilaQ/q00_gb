@@ -41,6 +41,11 @@ uint8_t mbc1romMode = 0;
 uint8_t mbc1ramNumber = 0;
 uint8_t mbc1ramEnabled = false;
 
+uint8_t mbc2romNumber = 1;
+uint8_t mbc2romMode = 0;
+uint8_t mbc2ramNumber = 0;
+uint8_t mbc2ramEnabled = false;
+
 uint8_t mbc3romNumber = 1;
 uint8_t mbc3romMode = 0;
 uint8_t mbc3ramNumber = 0;
@@ -71,7 +76,7 @@ void initROM() {
 		romtype = 0x02;
 
 	//	read and set RAM size accordingly to rom
-	switch (readFromMem(0x0149))
+	switch (memory[0x0149])
 	{
 	case 0x01:
 		ram[0] = new unsigned char[0x800];
@@ -262,6 +267,22 @@ void writeToMem(uint16_t adr, unsigned char val) {
 			memory[adr] = val;
 		}
 	}
+	//	MBC2
+	else if (romtype == 0x02) {
+		//	external RAM enable / disable
+		if (adr < 0x2000) {
+			mbc2ramEnabled = val > 0;
+		}
+		//	choose ROM bank nr (lower 5 bits, 0-4)
+		else if (adr < 0x4000) {
+			mbc2romNumber = val & 0x1f;
+			if (val == 0x00 || val == 0x20 || val == 0x40 || val == 0x60)
+				mbc2romNumber = (val & 0x1f) + 1;
+		}
+		else {
+			memory[adr] = val;
+		}
+	}
 	//	MBC3
 	else if (romtype == 0x03) {
 
@@ -303,7 +324,13 @@ unsigned char& readFromMem(uint16_t adr) {
 	}
 	//	MBC2
 	else if (romtype == 0x02) {
-
+		//	ROM banking
+		if (mbc2romNumber && (adr >= 0x4000 && adr < 0x8000)) {
+			uint32_t target = (mbc2romNumber * 0x4000) + (adr - 0x4000);
+			return rom[target];
+		}
+		else
+			return memory[adr];
 	}
 	//	MBC3
 	else if (romtype == 0x03) {
