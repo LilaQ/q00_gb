@@ -26,7 +26,7 @@ unsigned char winmapA[FB_SIZE_A];			//	3 bytes per pixel, RGBA24
 unsigned char spritemapA[FB_SIZE_A];		//	3 bytes per pixel, RGBA24
 
 uint8_t SCY, SCX, STAT, LY, LYC, LCDC, WY, WX;
-
+uint8_t lastMode = 0;
 uint16_t ppuCycles, frameDrawnFlag = 0, lineCalcFlag = 0;
 
 int tilemap;
@@ -35,11 +35,53 @@ int tilenr, colorval, colorfrompal;
 int row, xoff, yoff, xoffS, yoffS, xoffA, yoffA;
 
 int COLORS[] = {
-		0xff,
-		0xaa,
-		0x55,
-		0x00
+		0xff,0xff,0xff,
+		0xaa,0xaa,0xaa,
+		0x55,0x55,0x55,
+		0x00,0x00,0x00
 };
+
+int BW[] = {
+		0xff,0xff,0xff,
+		0xaa,0xaa,0xaa,
+		0x55,0x55,0x55,
+		0x00,0x00,0x00
+};
+
+int GREEN[] = {
+		0xd0,0xd0,0x58,
+		0xa0,0xa8,0x40,
+		0x70,0x80,0x28,
+		0x40,0x50,0x10
+};
+
+int BEEG[] = {
+		0xd6,0x85,0xf1,
+		0xf2,0x5d,0xc6,
+		0xf0,0x35,0x81,
+		0xea,0x1e,0x47
+};
+
+void setPalette(uint8_t val) {
+
+	switch (val)
+	{
+	case 1: {	//	b/w
+		std::copy(BW, BW + 12, COLORS);
+		break;
+	}
+	case 2: { //	green
+		std::copy(GREEN, GREEN + 12, COLORS);
+		break;
+	}
+	case 3: { //	beeg
+		std::copy(BEEG, BEEG + 12, COLORS);
+		break;
+	}
+	default:
+		break;
+	}
+}
 
 void initPPU() {
 	//	init and create window and renderer
@@ -82,9 +124,9 @@ void createBGMap() {
 			}
 			//	get real color from palette
 			colorfrompal = ( readFromMem(0xff47) >> (2 * colorval) ) & 3;
-			bgmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
-			bgmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
-			bgmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
+			bgmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal * 3];
+			bgmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal * 3 + 1];
+			bgmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal * 3 + 2];
 		}
 	}
 }
@@ -117,9 +159,9 @@ void calcBG(uint8_t row) {
 
 		//	get real color from palette
 		colorfrompal = (p >> (2 * colorval)) & 3;
-		bgmapA[(row * 256 * 4) + (j * 4)] = COLORS[colorfrompal];
-		bgmapA[(row * 256 * 4) + (j * 4) + 1] = COLORS[colorfrompal];
-		bgmapA[(row * 256 * 4) + (j * 4) + 2] = COLORS[colorfrompal];
+		bgmapA[(row * 256 * 4) + (j * 4)] = COLORS[colorfrompal * 3];
+		bgmapA[(row * 256 * 4) + (j * 4) + 1] = COLORS[colorfrompal * 3 + 1];
+		bgmapA[(row * 256 * 4) + (j * 4) + 2] = COLORS[colorfrompal * 3 + 2];
 		bgmapA[(row * 256 * 4) + (j * 4) + 3] = 0xff;
 
 	}
@@ -152,9 +194,9 @@ void createWindowMap() {
 			colorfrompal = (readFromMem(0xff47) >> (2 * colorval)) & 3;
 
 			//	draw to array, if there is something to draw
-			winmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal];
-			winmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal];
-			winmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal];
+			winmap[(i * 256 * 3) + (j * 3)] = COLORS[colorfrompal * 3];
+			winmap[(i * 256 * 3) + (j * 3) + 1] = COLORS[colorfrompal * 3 + 1];
+			winmap[(i * 256 * 3) + (j * 3) + 2] = COLORS[colorfrompal * 3 + 2];
 		}
 	}
 }
@@ -191,9 +233,9 @@ void calcWindow(uint8_t row) {
 					colorfrompal = (readFromMem(0xff47) >> (2 * colorval)) & 3;
 
 					//	draw to array, if there is something to draw
-					winmapA[(row * 256 * 4) + (j * 4)] = COLORS[colorfrompal];
-					winmapA[(row * 256 * 4) + (j * 4) + 1] = COLORS[colorfrompal];
-					winmapA[(row * 256 * 4) + (j * 4) + 2] = COLORS[colorfrompal];
+					winmapA[(row * 256 * 4) + (j * 4)] = COLORS[colorfrompal * 3];
+					winmapA[(row * 256 * 4) + (j * 4) + 1] = COLORS[colorfrompal * 3 + 1];
+					winmapA[(row * 256 * 4) + (j * 4) + 2] = COLORS[colorfrompal * 3 + 2];
 					winmapA[(row * 256 * 4) + (j * 4) + 3] = 0xff;
 				}
 			}
@@ -249,9 +291,9 @@ void createSpriteMap() {
 
 					//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
 					if (colorval != 0 && ((y + u) <= 0xff) && ((x + v) <= 0xff)) {
-						spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal];
-						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal];
-						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal];
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3)] = COLORS[colorfrompal * 3];
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 1] = COLORS[colorfrompal * 3 + 1];
+						spritemap[((y + u) * 256 * 3) + ((x + v) * 3) + 2] = COLORS[colorfrompal * 3 + 2];
 					}
 				}
 		}
@@ -307,9 +349,9 @@ void calcSprite(uint8_t row) {
 
 						//	if not zero, set paint ( also, make sure we stay in the boundaries of our array)
 						if (colorval != 0 && ((y + u) <= 0xff) && ((x + v) <= 0xff)) {
-							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4)] = COLORS[colorfrompal];
-							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4) + 1] = COLORS[colorfrompal];
-							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4) + 2] = COLORS[colorfrompal];
+							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4)] = COLORS[colorfrompal * 3];
+							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4) + 1] = COLORS[colorfrompal * 3 + 1];
+							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4) + 2] = COLORS[colorfrompal * 3 + 2];
 							spritemapA[((y + u - 16) * 256 * 4) + ((x + v - 8) * 4) + 3] = 0xff;
 						}
 					}
@@ -419,11 +461,48 @@ void stepPPU(uint8_t cycles) {
 	// ppuCycles += cycles
 	ppuCycles += cycles;
 
+	// set mode in STAT register, depending on cycles of this current line
+	// OAM (80cyc), Mode3/Drawing (172cyc), H-Blank(204cyc)
 	
+	//	Mode 2 / OAM mode
+	if (ppuCycles < 81) {			
+		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x02);
+		setPPUstate(2);
+		//	throw STAT interrupt, if we have an immediate mode change
+		if ((readFromMem(0xff41) >> 5) & 0x01)
+			if (lastMode != 2)
+				writeToMem(0xff0f, readFromMem(0xff0f) | 2);
+		lastMode = 2;
+	}
+	//	Mode 3 / Drawing
+	else if (ppuCycles < 253) {		
+		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x03);
+		setPPUstate(3);
+	}
+	//	Mode 0 / H-Blank
+	else if (ppuCycles < 457) {
+		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x00);
+		setPPUstate(0);
+		//	throw STAT interrupt, if we have an immediate mode change
+		if ((readFromMem(0xff41) >> 3) & 0x01)
+			if (lastMode != 0)
+				writeToMem(0xff0f, readFromMem(0xff0f) | 2);
+		lastMode = 0;
+	}
+	//	Mode 1 / V-Blank
+	if (readFromMem(0xff44) >= 144) {
+		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x01);
+		setPPUstate(1);
+		//	throw STAT interrupt, if we have an immediate mode change
+		if ((readFromMem(0xff41) >> 4) & 0x01)
+			if (lastMode != 1)
+				writeToMem(0xff0f, readFromMem(0xff0f) | 2);
+		lastMode = 1;
+	}
 
 	// as soon as in H-Blank -> calc pixels for BG, Win, Sprites from
 	if (ppuCycles > 252 && readFromMem(0xff44) < 145 && !lineCalcFlag) {
-		
+
 		//	calc BG for x cycles
 		calcBG(readFromMem(0xff44));
 
@@ -438,32 +517,23 @@ void stepPPU(uint8_t cycles) {
 
 	}
 
-	// set mode in STAT register, depending on cycles of this current line
-	// OAM (80cyc), Mode3/Drawing (172cyc), H-Blank(204cyc)
-	if (ppuCycles < 81)				//	OAM mode
-		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x02);
-	else if (ppuCycles < 253)		//	Mode 3 / Drawing
-		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x03);
-	else if (ppuCycles < 457)		//	H-Blank
-		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x00);
-	if(readFromMem(0xff44) >= 144)	//	V-Blank
-		writeToMem(0xff41, (readFromMem(0xff41) & 0xfc) | 0x01);
-	
 	// if vblank, draw once (drawFlag)
-	if (!frameDrawnFlag && readFromMem(0xff44) > 144) {
+	if (!frameDrawnFlag && readFromMem(0xff44) == 144) {
 		
-		//	V-Blank interrupt IF
-		writeToMem(0xff0f, readFromMem(0xff0f) | 1);
-
 		//	only draw if display is enabled
-		if (((LCDC >> 7) & 0x01) == 1) 
-			drawFrame();
-		frameDrawnFlag = 1;
+		if (readFromMem(0xff40) >> 7) {
+			//	V-Blank interrupt IF
+			writeToMem(0xff0f, readFromMem(0xff0f) | 1);
 
-		//	rest BG, Win, Sprites
-		memset(bgmapA, 0, FB_SIZE);
-		memset(spritemapA, 0, FB_SIZE);
-		memset(winmapA, 0, FB_SIZE);
+
+			drawFrame();
+			frameDrawnFlag = 1;
+
+			//	rest BG, Win, Sprites
+			memset(bgmapA, 0, FB_SIZE);
+			memset(spritemapA, 0, FB_SIZE);
+			memset(winmapA, 0, FB_SIZE);
+		}
 	}
 
 	// if ppuCycles > line, ppCycles -= line => increase LY

@@ -61,7 +61,7 @@ using namespace std;
 
 //	Debug Vars
 unsigned char cartridge[0xFA000];	
-string filename = "tennis.gb";
+string filename = "sm2.gb";
 
 /*	blargg's tests filesnames:
 
@@ -102,6 +102,10 @@ void handleInterrupts();
 void printDebug();
 void showMemoryMap();
 void showAbout();
+
+uint16_t getPC() {
+	return pc;
+}
 
 int main() {
 
@@ -151,17 +155,8 @@ int main() {
 	int sum = 0;
 	int cyc = 0;
 
+	//	does this break stuff? is it needed for some games?
 	readFromMem(0xff44) = 0x90;
-
-	//	print SDL
-	SDL_version compiled;
-	SDL_version linked;
-	SDL_VERSION(&compiled);
-	SDL_GetVersion(&linked);
-	printf("We compiled against SDL version %d.%d.%d ...\n",
-		compiled.major, compiled.minor, compiled.patch);
-	printf("But we are linking against SDL version %d.%d.%d.\n",
-		linked.major, linked.minor, linked.patch);
 
 	//	start CPU
 	while (1) {
@@ -174,8 +169,6 @@ int main() {
 			//	if system is halted just idle, but still commence timers and condition for while loop
 			else
 				cyc = 1;
-			/*if(pc < 0x100)
-				printf("PC: 0x%04x\n", pc);*/
 
 			stepPPU(cyc * 4);
 
@@ -220,6 +213,7 @@ void resetGameboy() {
 	interrupts_enabled = 0;
 	timer_clocksum = 0;
 	div_clocksum = 0;
+	readFromMem(0xff44) = 0x90;
 
 	//	call main again
 	main();
@@ -346,17 +340,20 @@ void initWindow() {
 	HMENU hFile = CreateMenu();
 	HMENU hEdit = CreateMenu();
 	HMENU hHelp = CreateMenu();
+	HMENU hConfig = CreateMenu();
+	HMENU hSound = CreateMenu();
+	HMENU hPalettes = CreateMenu();
 	HMENU hDebugger = CreateMenu();
 	HMENU hSavestates = CreateMenu();
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "[ main ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hConfig, "[ config ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hSavestates, "[ savestates ]");
 	AppendMenu(hMenuBar, MF_STRING, 11, "[ ||> un/pause ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
 	AppendMenu(hFile, MF_STRING, 9, "» Load ROM");
 	AppendMenu(hFile, MF_STRING, 7, "» Reset");
 	AppendMenu(hFile, MF_STRING, 1, "» Exit");
-	AppendMenu(hFile, MF_STRING, 2, "Configure Controls");
 	AppendMenu(hHelp, MF_STRING, 3, "About");
 	AppendMenu(hDebugger, MF_STRING, 4, "» Tile Map");
 	AppendMenu(hDebugger, MF_STRING, 5, "» BG Map");
@@ -365,6 +362,17 @@ void initWindow() {
 	AppendMenu(hDebugger, MF_STRING, 8, "» Debugger");
 	AppendMenu(hSavestates, MF_STRING, 12, "» Save State");
 	AppendMenu(hSavestates, MF_STRING, 13, "» Load State");
+	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hSound, "[ sound ]");
+	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hPalettes, "[ palette ]");
+	AppendMenu(hSound, MF_STRING, 14, "» disable/enable");
+	AppendMenu(hSound, MF_STRING, 15, "» disable/enable SC1");
+	AppendMenu(hSound, MF_STRING, 16, "» disable/enable SC2");
+	AppendMenu(hSound, MF_STRING, 17, "» disable/enable SC3");
+	AppendMenu(hSound, MF_STRING, 18, "» disable/enable SC4");
+	AppendMenu(hSound, MF_STRING, 18, "» disable/enable SC4");
+	AppendMenu(hPalettes, MF_STRING, 19, "» b/w");
+	AppendMenu(hPalettes, MF_STRING, 20, "» green");
+	AppendMenu(hPalettes, MF_STRING, 21, "» beeg");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -502,6 +510,33 @@ void handleWindowEvents( SDL_Event event) {
 
 					//	resume emulation
 					unpaused = true;
+				}
+				//	disable / enable sound
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 14) {
+				}
+				//	disable / enable SC1
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 15) {
+				}
+				//	disable / enable SC2
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 16) {
+				}
+				//	disable / enable SC3
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 17) {
+				}
+				//	disable / enable SC4
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 18) {
+				}
+				//	set palette b/w
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 19) {
+					setPalette(1);
+				}
+				//	set palette green
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 20) {
+					setPalette(2);
+				}
+				//	set palette beeg
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 21) {
+					setPalette(3);
 				}
 			}
 			//	close a window

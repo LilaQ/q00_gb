@@ -7,3 +7,4 @@ void drawBGMap(SDL_Renderer* tRenderer, SDL_Window* tWindow);
 void drawWindowMap(SDL_Renderer* tRenderer, SDL_Window* tWindow);
 void drawSpriteMap(SDL_Renderer* tRenderer, SDL_Window* tWindow);
 void stopPPU();
+void setPalette(uint8_t val);

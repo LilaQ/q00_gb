@@ -10,3 +10,5 @@ void aluToMem(uint16_t, int8_t);
 unsigned char& readFromMem(uint16_t);
 void saveState(char filename[], Registers& registers, Flags& flags, uint16_t pc, uint16_t sp);
 void loadState(char filename[], Registers & registers, Flags & flags, uint16_t pc, uint16_t sp);
+void setPPUstate(uint8_t state);
+uint16_t getROM();

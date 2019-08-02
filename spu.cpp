@@ -535,8 +535,6 @@ Square 1's sweep does several things (see frequency sweep).
 */
 void resetSC1length(uint8_t val) {
 
-	printf("SC1 reset\n");
-
 	//	reset length
 	if (SC1len == 0)
 		SC1len = 64 - val;
@@ -606,7 +604,6 @@ void resetSC3length(uint8_t val) {
 
 //	reloads the length counter for SC4, with all the other according settings
 void resetSC4length(uint8_t val) {
-	printf("SC4 reset\n");
 
 	if (!SC4len)
 		SC4len = 64 - val;

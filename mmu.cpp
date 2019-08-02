@@ -3,6 +3,7 @@
 #include "mmu.h"
 #include "spu.h"
 #include "structs.h"
+#include "main.h"
 #include <iostream>
 #include <cstdint>
 
@@ -35,6 +36,7 @@ unsigned char memory[0xFA000];		//	Memory
 unsigned char rom[0xFA000];			//	Cartridge
 unsigned char romtype = 0x00;
 unsigned char *ram[8];				//	pointer to RAM
+uint8_t PPUstate = 2;				//	drawing mode the PPU currently is in
 
 uint8_t mbc1romNumber = 1;
 uint8_t mbc1romMode = 0;
@@ -176,8 +178,23 @@ void loadROM(unsigned char c[]) {
 	initROM();
 }
 
+//	set the mode, the PPU is currently in (important for OAM / VRAM access / denying access on reads / writes)
+void setPPUstate(uint8_t state) {
+	PPUstate = state;
+}
+
 //	write unsigned char to memory
 void writeToMem(uint16_t adr, unsigned char val) {
+
+	//	VRAM / OAM access regulations, depending on PPU state
+	//	VRAM accessible in mode 0,1,2	|	0x8000-0x9fff
+	//	OAM accessible in mode 0,1		|	0xfe00-0xfe9f
+	/*if (adr >= 0x8000 && adr <= 0x9fff && PPUstate == 3) {
+		return;
+	}
+	if (adr >= 0xfe00 && adr <= 0xfe9f && (PPUstate == 3 || PPUstate == 2)) {
+		return;
+	}*/
 
 	//	[0xff26 - enable sound, all channels]
 	if (adr == 0xff26) {
@@ -314,8 +331,23 @@ void writeToMem(uint16_t adr, unsigned char val) {
 	}
 }
 
+uint16_t getROM() {
+	return mbc1romNumber;
+}
+
 //	read a byte from memory
 unsigned char& readFromMem(uint16_t adr) {
+
+	//	VRAM / OAM access regulations, depending on PPU state
+	//	VRAM accessible in mode 0,1,2	|	0x8000-0x9fff
+	//	OAM accessible in mode 0,1		|	0xfe00-0xfe9f
+	/*unsigned char undefined_return = 0xff;
+	if (adr >= 0x8000 && adr <= 0x9fff && PPUstate == 3) {
+		return undefined_return;
+	}
+	if (adr >= 0xfe00 && adr <= 0xfe9f && (PPUstate == 3 || PPUstate == 2)) {
+		return undefined_return;
+	}*/
 
 	//	MBC1 
 	if (romtype == 0x01 && mbc1romNumber && (adr >= 0x4000 && adr < 0x8000)) {
@@ -347,7 +379,7 @@ unsigned char& readFromMem(uint16_t adr) {
 			}
 			//	RTC register
 			else {
-
+				printf("WARNING! Game tries to access unimplemented MBC3 RTC!!\n");
 			}
 		}
 		else
