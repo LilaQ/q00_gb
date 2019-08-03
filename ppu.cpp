@@ -62,6 +62,13 @@ int BEEG[] = {
 		0xea,0x1e,0x47
 };
 
+int GBP[] = {
+		0xe3,0xe6,0xc9,
+		0xc3,0xc4,0xa5,
+		0x8e,0x8b,0x61,
+		0x6c,0x6c,0x4e
+};
+
 void setPalette(uint8_t val) {
 
 	switch (val)
@@ -78,6 +85,10 @@ void setPalette(uint8_t val) {
 		std::copy(BEEG, BEEG + 12, COLORS);
 		break;
 	}
+	case 4: { //	beeg
+		std::copy(GBP, GBP + 12, COLORS);
+		break;
+	}
 	default:
 		break;
 	}
@@ -88,8 +99,10 @@ void initPPU() {
 	SDL_Init(SDL_INIT_VIDEO);
 	//SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+	//SDL_CreateWindowAndRenderer(160, 144, SDL_WINDOW_FULLSCREEN_DESKTOP, &window, &renderer);
 	SDL_CreateWindowAndRenderer(160, 144, 0, &window, &renderer);
 	SDL_SetWindowSize(window, 480, 432);
+	SDL_RenderSetLogicalSize(renderer, 160, 144);
 	SDL_SetWindowResizable(window, SDL_TRUE);
 
 	//	for fast rendering, create a texture

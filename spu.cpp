@@ -68,6 +68,12 @@ uint8_t SC4envelope = 0;
 uint8_t SC4divisor[8] = { 8, 16, 32, 48, 64, 80, 96, 112 };
 uint16_t SC4lfsr = 0;
 
+bool useSC1 = true;
+bool useSC2 = true;
+bool useSC3 = true;
+bool useSC4 = true;
+bool bit_remix = false;
+
 uint8_t duties[4][8] = {
 	{0,0,0,0,0,0,0,1},			//	00 (0x0)
 	{1,0,0,0,0,0,0,1},			//	01 (0x1)
@@ -76,6 +82,37 @@ uint8_t duties[4][8] = {
 };
 
 uint16_t sweepCalc();
+
+void toggleAudio() {
+	if (!useSC1) {
+		useSC1 = true;
+		useSC2 = true;
+		useSC3 = true;
+		useSC4 = true;
+	}
+	else {
+		useSC1 = false;
+		useSC2 = false;
+		useSC3 = false;
+		useSC4 = false;
+	}
+}
+
+void toggleSC1() {
+	useSC1 = !useSC1;
+}
+void toggleSC2() {
+	useSC2 = !useSC2;
+}
+void toggleSC3() {
+	useSC3 = !useSC3;
+}
+void toggleSC4() {
+	useSC4 = !useSC4;
+}
+void toggleRemix() {
+	bit_remix = !bit_remix;
+}
 
 internal void SDLInitAudio(int32_t SamplesPerSecond, int32_t BufferSize)
 {
@@ -291,28 +328,55 @@ void stepSC3(uint8_t c) {
 			SC3pcc = 95;
 			//	enabled channel
 			if (SC3enabled) {
-				uint8_t wave = readFromMem(0xff30 + (SC3waveIndex / 2));
-				if (SC3waveIndex % 2) {
-					wave = wave & 0xf;
+				if (!bit_remix) {
+					uint8_t wave = readFromMem(0xff30 + (SC3waveIndex / 2));
+					if (SC3waveIndex % 2) {
+						wave = wave & 0xf;
+					}
+					else {
+						wave = wave >> 4;
+					}
+
+					uint8_t vol = (readFromMem(0xff1c) >> 5) & 3;
+					if (vol)
+						wave = wave >> (vol - 1);
+					else
+						wave = wave >> 4;
+
+					//	if dac is enabled, output actual wave
+					if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
+						SC3buf.push_back((float)wave / 100);
+						SC3buf.push_back((float)wave / 100);
+					}
+					else {
+						SC3buf.push_back(0);
+						SC3buf.push_back(0);
+					}
 				}
 				else {
-					wave = wave >> 4;
-				}
+					int8_t wave = readFromMem(0xff30 + (SC3waveIndex / 2));
+					if (SC3waveIndex % 2) {
+						wave = wave & 0xf;
+					}
+					else {
+						wave = wave >> 4;
+					}
 
-				uint8_t vol = (readFromMem(0xff1c) >> 5) & 3;
-				if (vol)
-					wave = wave >> (vol - 1);
-				else
-					wave = wave >> 4;
+					uint8_t vol = (readFromMem(0xff1c) >> 5) & 3;
+					if (vol)
+						wave = wave >> (vol - 1);
+					else
+						wave = wave >> 4;
 
-				//	if dac is enabled, output actual wave
-				if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
-					SC3buf.push_back((float)wave / 100);
-					SC3buf.push_back((float)wave / 100);
-				}
-				else {
-					SC3buf.push_back(0);
-					SC3buf.push_back(0);
+					//	if dac is enabled, output actual wave
+					if (readFromMem(0xff1a) >> 7 && (readFromMem(0xff25) & 0x44)) {
+						SC3buf.push_back((float)wave / 100);
+						SC3buf.push_back((float)wave / 100);
+					}
+					else {
+						SC3buf.push_back(0);
+						SC3buf.push_back(0);
+					}
 				}
 			}
 			//	disabled channel
@@ -427,10 +491,14 @@ void stepSPU(unsigned char cycles) {
 
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
-			res += SC1buf.at(i);
-			res += SC2buf.at(i);
-			res += SC3buf.at(i);
-			res += SC4buf.at(i);
+			if(useSC1)
+				res += SC1buf.at(i);
+			if (useSC2)
+				res += SC2buf.at(i);
+			if (useSC3)
+				res += SC3buf.at(i);
+			if (useSC4)
+				res += SC4buf.at(i);
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used

@@ -351,17 +351,17 @@ void initWindow() {
 	AppendMenu(hMenuBar, MF_STRING, 11, "[ ||> un/pause ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
-	AppendMenu(hFile, MF_STRING, 9, "» Load ROM");
-	AppendMenu(hFile, MF_STRING, 7, "» Reset");
-	AppendMenu(hFile, MF_STRING, 1, "» Exit");
-	AppendMenu(hHelp, MF_STRING, 3, "About");
-	AppendMenu(hDebugger, MF_STRING, 4, "» Tile Map");
-	AppendMenu(hDebugger, MF_STRING, 5, "» BG Map");
-	AppendMenu(hDebugger, MF_STRING, 10, "» Window Map");
-	AppendMenu(hDebugger, MF_STRING, 6, "» Sprite Map");
-	AppendMenu(hDebugger, MF_STRING, 8, "» Debugger");
-	AppendMenu(hSavestates, MF_STRING, 12, "» Save State");
-	AppendMenu(hSavestates, MF_STRING, 13, "» Load State");
+	AppendMenu(hFile, MF_STRING, 9, "» load rom");
+	AppendMenu(hFile, MF_STRING, 7, "» reset");
+	AppendMenu(hFile, MF_STRING, 1, "» exit");
+	AppendMenu(hHelp, MF_STRING, 3, "» about");
+	AppendMenu(hDebugger, MF_STRING, 4, "» tile map");
+	AppendMenu(hDebugger, MF_STRING, 5, "» bg map");
+	AppendMenu(hDebugger, MF_STRING, 10, "» window map");
+	AppendMenu(hDebugger, MF_STRING, 6, "» sprite map");
+	AppendMenu(hDebugger, MF_STRING, 8, "» debugger");
+	AppendMenu(hSavestates, MF_STRING, 12, "» save state");
+	AppendMenu(hSavestates, MF_STRING, 13, "» load state");
 	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hSound, "[ sound ]");
 	AppendMenu(hConfig, MF_POPUP, (UINT_PTR)hPalettes, "[ palette ]");
 	AppendMenu(hSound, MF_STRING, 14, "» disable/enable");
@@ -369,10 +369,11 @@ void initWindow() {
 	AppendMenu(hSound, MF_STRING, 16, "» disable/enable SC2");
 	AppendMenu(hSound, MF_STRING, 17, "» disable/enable SC3");
 	AppendMenu(hSound, MF_STRING, 18, "» disable/enable SC4");
-	AppendMenu(hSound, MF_STRING, 18, "» disable/enable SC4");
+	AppendMenu(hSound, MF_STRING, 23, "» toggle 8-bit remix mode");
 	AppendMenu(hPalettes, MF_STRING, 19, "» b/w");
 	AppendMenu(hPalettes, MF_STRING, 20, "» green");
 	AppendMenu(hPalettes, MF_STRING, 21, "» beeg");
+	AppendMenu(hPalettes, MF_STRING, 22, "» gbp");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -486,7 +487,7 @@ void handleWindowEvents( SDL_Event event) {
 				//	load state
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 13) {
 
-					//	halt emulation to avoid damaging the data
+					//	halt emulation to avoid damaging the data (keep it that way, user must unpause)
 					unpaused = false;
 
 					printf("loading savestate\n");
@@ -507,24 +508,30 @@ void handleWindowEvents( SDL_Event event) {
 						filename = f;
 						loadState(f, registers, flags, pc, sp);
 					}
-
-					//	resume emulation
-					unpaused = true;
 				}
 				//	disable / enable sound
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 14) {
+					toggleAudio();
 				}
 				//	disable / enable SC1
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 15) {
+					toggleSC1();
 				}
 				//	disable / enable SC2
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 16) {
+					toggleSC2();
 				}
 				//	disable / enable SC3
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 17) {
+					toggleSC3();
 				}
 				//	disable / enable SC4
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 18) {
+					toggleSC4();
+				}
+				//	toggle 8bit remix mode
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 23) {
+					toggleRemix();
 				}
 				//	set palette b/w
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 19) {
@@ -538,6 +545,10 @@ void handleWindowEvents( SDL_Event event) {
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 21) {
 					setPalette(3);
 				}
+				//	set palette gbp
+				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 22) {
+				setPalette(4);
+				}
 			}
 			//	close a window
 			if (event.syswm.msg->msg.win.msg == WM_CLOSE) {
@@ -547,9 +558,17 @@ void handleWindowEvents( SDL_Event event) {
 			break;
 	};
 
+	uint8_t* keys = (uint8_t*)SDL_GetKeyboardState(NULL);
+	//	pause/unpause
+	if (keys[SDL_SCANCODE_SPACE]) {
+		unpaused = !unpaused;
+		keys[SDL_SCANCODE_SPACE] = 0;
+	}
 }
 
 uint8_t readInput(unsigned char val) {
+
+	//	TODO: cant press top+left+B, why?
 
 	const uint8_t* keys = SDL_GetKeyboardState(NULL);
 	//	Buttons
