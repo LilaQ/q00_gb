@@ -350,11 +350,13 @@ void initWindow() {
 	HMENU hPalettes = CreateMenu();
 	HMENU hDebugger = CreateMenu();
 	HMENU hSavestates = CreateMenu();
+	HMENU hVol = CreateMenu();
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hFile, "[ main ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hConfig, "[ config ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hVol, "[ vol ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hSavestates, "[ savestates ]");
 	AppendMenu(hMenuBar, MF_STRING, 11, "[ ||> un/pause ]");
-	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debugging ]");
+	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hDebugger, "[ debug ]");
 	AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hHelp, "[ help ]");
 	AppendMenu(hFile, MF_STRING, 9, "» load rom");
 	AppendMenu(hFile, MF_STRING, 7, "» reset");
@@ -379,6 +381,16 @@ void initWindow() {
 	AppendMenu(hPalettes, MF_STRING, 20, "» green");
 	AppendMenu(hPalettes, MF_STRING, 21, "» beeg");
 	AppendMenu(hPalettes, MF_STRING, 22, "» gbp");
+	AppendMenu(hVol, MF_STRING, 24, "» 10%");
+	AppendMenu(hVol, MF_STRING, 25, "» 20%");
+	AppendMenu(hVol, MF_STRING, 26, "» 30%");
+	AppendMenu(hVol, MF_STRING, 27, "» 40%");
+	AppendMenu(hVol, MF_STRING, 28, "» 50%");
+	AppendMenu(hVol, MF_STRING, 29, "» 60%");
+	AppendMenu(hVol, MF_STRING, 30, "» 70%");
+	AppendMenu(hVol, MF_STRING, 31, "» 80%");
+	AppendMenu(hVol, MF_STRING, 32, "» 90%");
+	AppendMenu(hVol, MF_STRING, 33, "» 100%");
 	SetMenu(hwnd, hMenuBar);
 
 	//	Enable WM events for SDL Window
@@ -552,7 +564,21 @@ void handleWindowEvents( SDL_Event event) {
 				}
 				//	set palette gbp
 				else if (LOWORD(event.syswm.msg->msg.win.wParam) == 22) {
-				setPalette(4);
+					setPalette(4);
+				}
+				//	set volume
+				else if (	LOWORD(event.syswm.msg->msg.win.wParam) == 24 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 25 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 26 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 27 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 28 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 29 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 30 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 31 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 32 ||
+							LOWORD(event.syswm.msg->msg.win.wParam) == 33
+				) {
+					setVolume((float)(LOWORD(event.syswm.msg->msg.win.wParam) - 23) * 0.1);
 				}
 			}
 			//	close a window

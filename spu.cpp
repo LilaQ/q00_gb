@@ -74,6 +74,8 @@ bool useSC3 = true;
 bool useSC4 = true;
 bool bit_remix = false;
 
+float volume = 0.5;
+
 uint8_t duties[4][8] = {
 	{0,0,0,0,0,0,0,1},			//	00 (0x0)
 	{1,0,0,0,0,0,0,1},			//	01 (0x1)
@@ -112,6 +114,9 @@ void toggleSC4() {
 }
 void toggleRemix() {
 	bit_remix = !bit_remix;
+}
+void setVolume(float v) {
+	volume = v;
 }
 
 internal void SDLInitAudio(int32_t SamplesPerSecond, int32_t BufferSize)
@@ -492,13 +497,13 @@ void stepSPU(unsigned char cycles) {
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
 			if(useSC1)
-				res += SC1buf.at(i);
+				res += SC1buf.at(i) * volume;
 			if (useSC2)
-				res += SC2buf.at(i);
+				res += SC2buf.at(i) * volume;
 			if (useSC3)
-				res += SC3buf.at(i);
+				res += SC3buf.at(i) * volume;
 			if (useSC4)
-				res += SC4buf.at(i);
+				res += SC4buf.at(i) * volume;
 			Mixbuf.push_back(res);
 		}
 		//	send audio data to device; buffer is times 4, because we use floats now, which have 4 bytes per float, and buffer needs to have information of amount of bytes to be used

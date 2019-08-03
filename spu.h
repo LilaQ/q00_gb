@@ -12,3 +12,4 @@ void toggleSC2();
 void toggleSC3();
 void toggleSC4();
 void toggleRemix();
+void setVolume(float v);
