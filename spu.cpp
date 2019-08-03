@@ -263,15 +263,15 @@ void stepSC2(uint8_t c) {
 			++SC2FrameSeq %= 8;
 
 			//	handle length
-			if (SC2FrameSeq % 2 == 0 && ((readFromMem(0xff19) >> 6) & 1)) {
+			if (SC2FrameSeq % 2 == 0 && ((readFromMem(0xff19) >> 6) & 1) && SC2len) {
 				SC2len--;
-				if (!SC2len) {
+				if (SC2len <= 0) {
 					SC2enabled = false;
 				}
 			}
 
 			//	handle envelope (volume envelope)
-			if (SC2FrameSeq == 6 && SC2envelopeEnabled) {
+			if (SC2FrameSeq == 7 && SC2envelopeEnabled && (readFromMem(0xff17) & 7)) {
 				//	tick envelope down
 				--SC2envelope;
 				//	when the envelope is done ticking to zero, it's time to trigger it's purpose
@@ -294,7 +294,7 @@ void stepSC2(uint8_t c) {
 		if (!--SC2pcc) {
 			SC2pcc = 95;
 			//	enabled channel
-			if (SC2enabled && (readFromMem(0xff25) & 0x22)) {
+			if (SC2enabled && (readFromMem(0xff25) & 0x22) && (readFromMem(0xff26) & 2)) {
 				int duty = readFromMem(0xff16) >> 6;
 				SC2buf.push_back((duties[duty][SC2dutyIndex] == 1) ? ((float)SC2amp / 100) : 0);
 				SC2buf.push_back((duties[duty][SC2dutyIndex] == 1) ? ((float)SC2amp / 100) : 0);

@@ -95,6 +95,7 @@ void setPalette(uint8_t val) {
 }
 
 void initPPU() {
+	
 	//	init and create window and renderer
 	SDL_Init(SDL_INIT_VIDEO);
 	//SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
@@ -114,6 +115,10 @@ void initPPU() {
 	memset(bgmapA, 0, FB_SIZE_A);
 	memset(spritemapA, 0, FB_SIZE_A);
 	memset(winmapA, 0, FB_SIZE_A);
+
+	//	reset vars
+	SCY = 0;
+	SCX = 0;
 
 	writeToMem(0xff41, 0x80);
 }

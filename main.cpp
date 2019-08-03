@@ -83,6 +83,7 @@ string filename = "sm2.gb";
 //	Main Vars
 SDL_Window* mainWindow;				//	Main Window
 SDL_Event event;					//	Eventhandler for all SDL events
+SDL_GameController* controller;		//	Gamepad, if available
 uint16_t pc = 0x0100;				//	Program Counter; our pointer that points to the current opcode; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint16_t sp = 0x0000;				//	Stack Pointer; full 16 bit / 2 byte for adressing the whole memory (0x0000 - 0xffff)
 uint8_t joypad = 0xff;				//	Storage for the joycon inputs
@@ -134,6 +135,10 @@ int main() {
 	}
 	fclose(file);
 	loadROM(cartridge);
+
+	//	init SDL Gamecontroller
+	SDL_Init(SDL_INIT_GAMECONTROLLER);
+	controller = SDL_NumJoysticks() ? SDL_GameControllerOpen(0) : NULL;
 
 	//	init MMU
 	initMMU();
@@ -568,12 +573,12 @@ void handleWindowEvents( SDL_Event event) {
 
 uint8_t readInput(unsigned char val) {
 
-	//	TODO: cant press top+left+B, why?
+	//	TODO: cant press top+left+B, why? [apparently hardware restricted]
 
 	const uint8_t* keys = SDL_GetKeyboardState(NULL);
 	//	Buttons
 	joypad = 0x0;
-	if ((val & 0x30) == 0x10) {
+	/*if ((val & 0x30) == 0x10) {
 		joypad |= keys[SDL_SCANCODE_A] ? 0 : 1;
 		joypad |= (keys[SDL_SCANCODE_S] ? 0 : 1) << 1;
 		joypad |= (keys[SDL_SCANCODE_X] ? 0 : 1) << 2;
@@ -585,6 +590,37 @@ uint8_t readInput(unsigned char val) {
 		joypad |= (keys[SDL_SCANCODE_LEFT] ? 0 : 1) << 1;
 		joypad |= (keys[SDL_SCANCODE_UP] ? 0 : 1) << 2;
 		joypad |= (keys[SDL_SCANCODE_DOWN] ? 0 : 1) << 3;
+	}*/
+
+	//	use gamepad as input
+	if (controller != NULL) {
+		bool Up = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP);
+		bool Down = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+		bool Left = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+		bool Right = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+		bool Back = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_START);
+		bool Start = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_BACK);
+		bool LeftShoulder = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+		bool RightShoulder = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+		bool AButton = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_A);
+		bool BButton = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_B);
+
+		int16_t StickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
+		int16_t StickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
+
+		if ((val & 0x30) == 0x10) {
+			joypad |= (AButton || keys[SDL_SCANCODE_A]) ? 0 : 1;
+			joypad |= ((BButton || keys[SDL_SCANCODE_S]) ? 0 : 1) << 1;
+			joypad |= ((Start || keys[SDL_SCANCODE_Z]) ? 0 : 1) << 2;
+			joypad |= ((Back || keys[SDL_SCANCODE_X]) ? 0 : 1) << 3;
+		}
+		//	Joypad
+		else if ((val & 0x30) == 0x20) {
+			joypad |= (Right || keys[SDL_SCANCODE_RIGHT] || (StickX > 10000)) ? 0 : 1;
+			joypad |= ((Left || keys[SDL_SCANCODE_LEFT] || (StickX < -10000)) ? 0 : 1) << 1;
+			joypad |= ((Up || keys[SDL_SCANCODE_UP] || (StickY < -10000))? 0 : 1) << 2;
+			joypad |= ((Down || keys[SDL_SCANCODE_DOWN] || (StickY > 10000))? 0 : 1) << 3;
+		}
 	}
 	val &= 0xf0;
 	val |= 0xc0;
