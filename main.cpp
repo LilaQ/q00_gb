@@ -602,21 +602,7 @@ uint8_t readInput(unsigned char val) {
 	//	TODO: cant press top+left+B, why? [apparently hardware restricted]
 
 	const uint8_t* keys = SDL_GetKeyboardState(NULL);
-	//	Buttons
 	joypad = 0x0;
-	/*if ((val & 0x30) == 0x10) {
-		joypad |= keys[SDL_SCANCODE_A] ? 0 : 1;
-		joypad |= (keys[SDL_SCANCODE_S] ? 0 : 1) << 1;
-		joypad |= (keys[SDL_SCANCODE_X] ? 0 : 1) << 2;
-		joypad |= (keys[SDL_SCANCODE_Z] ? 0 : 1) << 3;
-	}
-	//	Joypad
-	else if ((val & 0x30) == 0x20) {
-		joypad |= keys[SDL_SCANCODE_RIGHT] ? 0 : 1;
-		joypad |= (keys[SDL_SCANCODE_LEFT] ? 0 : 1) << 1;
-		joypad |= (keys[SDL_SCANCODE_UP] ? 0 : 1) << 2;
-		joypad |= (keys[SDL_SCANCODE_DOWN] ? 0 : 1) << 3;
-	}*/
 
 	//	use gamepad as input
 	if (controller != NULL) {
@@ -646,6 +632,22 @@ uint8_t readInput(unsigned char val) {
 			joypad |= ((Left || keys[SDL_SCANCODE_LEFT] || (StickX < -10000)) ? 0 : 1) << 1;
 			joypad |= ((Up || keys[SDL_SCANCODE_UP] || (StickY < -10000))? 0 : 1) << 2;
 			joypad |= ((Down || keys[SDL_SCANCODE_DOWN] || (StickY > 10000))? 0 : 1) << 3;
+		}
+	}
+	//	use keyboard only
+	else {
+		if ((val & 0x30) == 0x10) {
+			joypad |= keys[SDL_SCANCODE_A] ? 0 : 1;
+			joypad |= (keys[SDL_SCANCODE_S] ? 0 : 1) << 1;
+			joypad |= (keys[SDL_SCANCODE_X] ? 0 : 1) << 2;
+			joypad |= (keys[SDL_SCANCODE_Z] ? 0 : 1) << 3;
+		}
+		//	Joypad
+		else if ((val & 0x30) == 0x20) {
+			joypad |= keys[SDL_SCANCODE_RIGHT] ? 0 : 1;
+			joypad |= (keys[SDL_SCANCODE_LEFT] ? 0 : 1) << 1;
+			joypad |= (keys[SDL_SCANCODE_UP] ? 0 : 1) << 2;
+			joypad |= (keys[SDL_SCANCODE_DOWN] ? 0 : 1) << 3;
 		}
 	}
 	val &= 0xf0;
