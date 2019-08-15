@@ -491,9 +491,6 @@ void stepSPU(unsigned char cycles) {
 
 	if (SC1buf.size() >= 100 && SC2buf.size() >= 100 && SC3buf.size() >= 100 && SC4buf.size() >= 100) {
 
-		float dst = 0x0;
-		float src = 0x0;
-
 		for (int i = 0; i < 100; i++) {
 			float res = 0;
 			if(useSC1)
